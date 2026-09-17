@@ -5,6 +5,7 @@ import { useMutation } from "@tanstack/react-query";
 import * as Popover from "@radix-ui/react-popover";
 import { SmilePlus } from "lucide-react";
 import { apiSend } from "@/lib/api";
+import { useT } from "@/lib/i18n";
 
 type Reaction = { id: string; userId: string; emoji: string };
 
@@ -22,6 +23,7 @@ export function CommentReactions({
   onChange: () => void;
 }) {
   const [pickerOpen, setPickerOpen] = useState(false);
+  const t = useT();
   const toggle = useMutation({
     mutationFn: (emoji: string) => apiSend(`/api/comments/${commentId}/reactions`, "POST", { emoji }),
     onSuccess: onChange,
@@ -57,7 +59,7 @@ export function CommentReactions({
         <Popover.Trigger asChild>
           <button
             className="flex h-6 w-6 items-center justify-center rounded-full text-cu-text-tertiary opacity-0 transition-opacity hover:bg-cu-hover hover:text-cu-text group-hover:opacity-100"
-            title="Add reaction"
+            title={t("task.addReaction")}
           >
             <SmilePlus className="h-3.5 w-3.5" />
           </button>

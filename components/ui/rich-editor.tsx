@@ -17,6 +17,7 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { createMentionSuggestion, type MentionItem } from "@/lib/mention-suggestion";
+import { useT } from "@/lib/i18n";
 
 export function RichEditor({
   content,
@@ -37,6 +38,8 @@ export function RichEditor({
   autoFocus?: boolean;
   mentions?: MentionItem[];
 }) {
+  const t = useT();
+  const placeholderText = placeholder ?? t("editor.write");
   // ref so the mention suggestion (created once) always reads the latest list;
   // synced in an effect — the suggestion only reads it when the user types "@".
   const mentionsRef = useRef<MentionItem[]>(mentions ?? []);
@@ -47,7 +50,7 @@ export function RichEditor({
   const editor = useEditor({
     extensions: [
       StarterKit.configure({ heading: { levels: [1, 2, 3] } }),
-      Placeholder.configure({ placeholder: placeholder ?? "Write something…" }),
+      Placeholder.configure({ placeholder: placeholderText }),
       ...(mentions
         ? [
             Mention.configure({

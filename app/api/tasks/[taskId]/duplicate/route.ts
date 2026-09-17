@@ -40,6 +40,7 @@ export const POST = route(async (_req, { params }: Ctx) => {
       dueDate: src.dueDate,
       timeEstimate: src.timeEstimate,
       recurrence: src.recurrence,
+      moduleId: src.moduleId,
       createdById: user.id,
       assignees: { create: src.assignees.map((a) => ({ userId: a.userId })) },
       tags: { create: src.tags.map((t) => ({ tagId: t.tagId })) },

@@ -2,6 +2,7 @@
 
 import { useEffect } from "react";
 import { TriangleAlert } from "lucide-react";
+import { useT } from "@/lib/i18n";
 
 export default function Error({
   error,
@@ -10,6 +11,7 @@ export default function Error({
   error: Error & { digest?: string };
   reset: () => void;
 }) {
+  const t = useT();
   useEffect(() => {
     console.error(error);
   }, [error]);
@@ -20,16 +22,16 @@ export default function Error({
         <TriangleAlert className="h-6 w-6" />
       </div>
       <div>
-        <p className="text-[15px] font-semibold text-cu-text">Something went wrong</p>
+        <p className="text-[15px] font-semibold text-cu-text">{t("error.title")}</p>
         <p className="mt-1 text-[13px] text-cu-text-tertiary">
-          An unexpected error occurred. You can try again or reload the page.
+          {t("error.body")}
         </p>
       </div>
       <button
         onClick={reset}
         className="rounded-md bg-cu-purple px-3 py-1.5 text-[13px] font-medium text-white hover:bg-cu-purple-dark"
       >
-        Try again
+        {t("error.tryAgain")}
       </button>
     </div>
   );

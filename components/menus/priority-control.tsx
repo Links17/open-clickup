@@ -3,8 +3,9 @@
 import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
 import { Check, X } from "lucide-react";
 import { PriorityFlag } from "@/components/ui/primitives";
-import { PRIORITY_CONFIG, PRIORITY_ORDER } from "@/lib/constants";
+import { PRIORITY_ORDER } from "@/lib/constants";
 import { Priority } from "@/lib/enums";
+import { useT } from "@/lib/i18n";
 
 export function PriorityControl({
   value,
@@ -13,13 +14,14 @@ export function PriorityControl({
   value: Priority | null;
   onChange: (p: Priority | null) => void;
 }) {
+  const t = useT();
   return (
     <DropdownMenu.Root>
       <DropdownMenu.Trigger asChild>
         <button
           onClick={(e) => e.stopPropagation()}
           className="flex items-center justify-center rounded p-0.5 outline-none hover:bg-cu-hover"
-          title={value ? PRIORITY_CONFIG[value].label : "Set priority"}
+          title={value ? t(`priority.${value}`) : t("priority.set")}
         >
           <PriorityFlag priority={value} />
         </button>
@@ -32,7 +34,7 @@ export function PriorityControl({
           onClick={(e) => e.stopPropagation()}
         >
           <div className="px-2 py-1.5 text-[11px] font-semibold uppercase tracking-wide text-cu-text-tertiary">
-            Priority
+            {t("priority.title")}
           </div>
           {PRIORITY_ORDER.map((p) => (
             <DropdownMenu.Item
@@ -41,7 +43,7 @@ export function PriorityControl({
               className="flex cursor-pointer items-center gap-2 rounded px-2 py-1.5 text-[13px] outline-none hover:bg-cu-hover focus:bg-cu-hover"
             >
               <PriorityFlag priority={p} />
-              <span>{PRIORITY_CONFIG[p].label}</span>
+              <span>{t(`priority.${p}`)}</span>
               {value === p && <Check className="ml-auto h-3.5 w-3.5 text-cu-purple" />}
             </DropdownMenu.Item>
           ))}
@@ -51,7 +53,7 @@ export function PriorityControl({
             className="flex cursor-pointer items-center gap-2 rounded px-2 py-1.5 text-[13px] text-cu-text-secondary outline-none hover:bg-cu-hover focus:bg-cu-hover"
           >
             <X className="h-3.5 w-3.5" />
-            Clear
+            {t("common.clear")}
           </DropdownMenu.Item>
         </DropdownMenu.Content>
       </DropdownMenu.Portal>

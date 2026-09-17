@@ -9,6 +9,7 @@ import { apiGet } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import { StatusCircle } from "@/components/menus/status-control";
 import type { StatusType } from "@/lib/enums";
+import { useT } from "@/lib/i18n";
 
 type SearchResult = {
   tasks: {
@@ -27,6 +28,7 @@ type Flat =
 
 export function CommandPalette({ open, onClose }: { open: boolean; onClose: () => void }) {
   const router = useRouter();
+  const t = useT();
   const [q, setQ] = useState("");
   const [debounced, setDebounced] = useState("");
   const [active, setActive] = useState(0);
@@ -92,14 +94,14 @@ export function CommandPalette({ open, onClose }: { open: boolean; onClose: () =
           onKeyDown={onKeyDown}
           aria-describedby={undefined}
         >
-          <Dialog.Title className="sr-only">Search</Dialog.Title>
+          <Dialog.Title className="sr-only">{t("search.title")}</Dialog.Title>
           <div className="flex items-center gap-2.5 border-b border-cu-border px-4 py-3">
             <Search className="h-4 w-4 text-cu-text-tertiary" />
             <input
               autoFocus
               value={q}
               onChange={(e) => setQ(e.target.value)}
-              placeholder="Search tasks and lists…"
+              placeholder={t("search.placeholder")}
               className="flex-1 bg-transparent text-sm outline-none placeholder:text-cu-text-tertiary"
             />
             <kbd className="rounded bg-cu-hover px-1.5 py-0.5 text-[10px] text-cu-text-tertiary">ESC</kbd>
@@ -107,11 +109,11 @@ export function CommandPalette({ open, onClose }: { open: boolean; onClose: () =
 
           <div ref={listRef} className="max-h-[400px] overflow-y-auto p-1.5">
             {debounced && flat.length === 0 && (
-              <div className="px-3 py-8 text-center text-[13px] text-cu-text-tertiary">No results for “{debounced}”</div>
+              <div className="px-3 py-8 text-center text-[13px] text-cu-text-tertiary">{t("search.noResults", { q: debounced })}</div>
             )}
             {!debounced && (
               <div className="px-3 py-8 text-center text-[13px] text-cu-text-tertiary">
-                Type to search tasks and lists across your workspace.
+                {t("search.emptyHint")}
               </div>
             )}
             {flat.map((item, i) => (

@@ -28,8 +28,10 @@ import {
 import { SortableContext, useSortable, verticalListSortingStrategy, arrayMove } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { cn, midpoint } from "@/lib/utils";
+import { byUserTitle, displayLoggedTotal } from "@/lib/time";
+import { displayLabel, groupLabel, useT } from "@/lib/i18n";
 import type { ListData, TaskWithRelations, StatusModel, CustomFieldWithOptions } from "@/lib/queries";
-import { useUpdateTask, useCreateTask, useSetFieldValue, useDeleteTask, useDuplicateTask, useBulk } from "@/lib/hooks";
+import { useUpdateTask, useCreateTask, useSetFieldValue, useDeleteTask, useDuplicateTask, useBulk, useLogTime } from "@/lib/hooks";
 import { useWorkspace } from "@/components/workspace-context";
 import { groupTasks, type TaskGroup } from "@/lib/grouping";
 import type { GroupBy } from "@/lib/view-state";
@@ -37,6 +39,8 @@ import { StatusControl, StatusCircle } from "@/components/menus/status-control";
 import { PriorityControl } from "@/components/menus/priority-control";
 import { AssigneeControl } from "@/components/menus/assignee-control";
 import { DateControl } from "@/components/menus/date-control";
+import { EstimateControl } from "@/components/menus/estimate-control";
+import { LoggedTimeControl } from "@/components/menus/logged-time-control";
 import { TagChip } from "@/components/ui/primitives";
 import { CustomFieldControl } from "@/components/views/custom-field-control";
 import { AddFieldDialog } from "@/components/views/add-field-dialog";
@@ -51,7 +55,7 @@ export function ListView({
   groupBy = "status",
 }: {
   data: ListData;
-  onOpenTask: (taskId: string) => void;
+  onOpenTask: (taskId: string, parentId?: string) => void;
   groupBy?: GroupBy;
 }) {
   const { list, tasks } = data;
@@ -62,6 +66,7 @@ export function ListView({
   const update = useUpdateTask(list.id);
   const bulk = useBulk(list.id);
   const [addingField, setAddingField] = useState(false);
+  const [editingField, setEditingField] = useState<CustomFieldWithOptions | null>(null);
   const [selected, setSelected] = useState<Set<string>>(new Set());
 
   const toggleSelect = (id: string) =>
@@ -152,12 +157,17 @@ export function ListView({
   }
 
   const gridStyle = {
-    gridTemplateColumns: `minmax(260px,1fr) 120px 110px 120px ${customFields.map(() => "150px").join(" ")} 44px`,
+    gridTemplateColumns: `minmax(260px,1fr) 120px 110px 110px 90px 88px 80px ${customFields.map(() => "150px").join(" ")} 44px`,
   };
 
   const body = (
     <>
-      <ColumnHeader customFields={customFields} gridStyle={gridStyle} onAddField={() => setAddingField(true)} />
+      <ColumnHeader
+        customFields={customFields}
+        gridStyle={gridStyle}
+        onAddField={() => setAddingField(true)}
+        onEditField={setEditingField}
+      />
       {groups.map((group) => (
         <Group
           key={group.id}
@@ -189,6 +199,9 @@ export function ListView({
         )}
       </div>
       {addingField && <AddFieldDialog listId={list.id} onClose={() => setAddingField(false)} />}
+      {editingField && (
+        <AddFieldDialog listId={list.id} field={editingField} onClose={() => setEditingField(null)} />
+      )}
       {selected.size > 0 && (
         <BulkBar
           count={selected.size}
@@ -208,27 +221,41 @@ function ColumnHeader({
   customFields,
   gridStyle,
   onAddField,
+  onEditField,
 }: {
   customFields: CustomFieldWithOptions[];
   gridStyle: React.CSSProperties;
   onAddField: () => void;
+  onEditField: (field: CustomFieldWithOptions) => void;
 }) {
+  const t = useT();
   return (
     <div
       className="sticky top-0 z-10 grid items-center border-b border-cu-border bg-cu-bg px-3 py-1.5 text-[11px] font-semibold uppercase tracking-wide text-cu-text-tertiary"
       style={gridStyle}
     >
-      <div className="pl-7">Name</div>
-      <div>Assignee</div>
-      <div>Due date</div>
-      <div>Priority</div>
+      <div className="pl-7">{t("col.name")}</div>
+      <div>{t("col.assignee")}</div>
+      <div>{t("col.start")}</div>
+      <div>{t("col.dueDate")}</div>
+      <div>{t("col.priority")}</div>
+      <div>{t("col.estimate")}</div>
+      <div>{t("col.logged")}</div>
       {customFields.map((f) => (
-        <div key={f.id} className="truncate">{f.name}</div>
+        <button
+          key={f.id}
+          type="button"
+          title={t("field.editField")}
+          onClick={() => onEditField(f)}
+          className="truncate rounded px-1 text-left hover:bg-cu-hover hover:text-cu-text"
+        >
+          {displayLabel(t, f.name)}
+        </button>
       ))}
       <div className="flex justify-center">
         <button
           onClick={onAddField}
-          title="Add column"
+          title={t("list.addColumn")}
           className="rounded p-1 text-cu-text-tertiary hover:bg-cu-hover hover:text-cu-text"
         >
           <Plus className="h-3.5 w-3.5" />
@@ -260,12 +287,13 @@ function Group({
   sortable: boolean;
   selected: Set<string>;
   onToggleSelect: (id: string) => void;
-  onOpenTask: (id: string) => void;
+  onOpenTask: (id: string, parentId?: string) => void;
   onUpdate: (taskId: string, patch: Record<string, unknown>) => void;
 }) {
   const [collapsed, setCollapsed] = useState(false);
   const [adding, setAdding] = useState(false);
   const [visible, setVisible] = useState(PAGE_SIZE);
+  const t = useT();
 
   const rowProps = { statuses, customFields, gridStyle, selected, onToggleSelect, onOpenTask, onUpdate };
   const shown = group.tasks.slice(0, visible);
@@ -281,14 +309,14 @@ function Group({
           className="inline-flex items-center gap-1.5 rounded px-2 py-0.5 text-[11px] font-bold uppercase tracking-wide"
           style={{ color: group.color, backgroundColor: `${group.color}1f` }}
         >
-          {group.label}
+          {groupLabel(t, group)}
         </span>
         <span className="text-xs font-medium text-cu-text-tertiary">{group.tasks.length}</span>
         <button
           onClick={() => setAdding(true)}
           className="flex items-center gap-1 rounded px-1.5 py-0.5 text-xs text-cu-text-tertiary hover:bg-cu-hover hover:text-cu-text"
         >
-          <Plus className="h-3.5 w-3.5" /> Add Task
+          <Plus className="h-3.5 w-3.5" /> {t("list.addTask")}
         </button>
       </div>
 
@@ -308,7 +336,7 @@ function Group({
           onClick={() => setVisible((v) => v + PAGE_SIZE)}
           className="flex w-full items-center gap-1.5 border-t border-cu-border/60 px-3 py-1.5 pl-[42px] text-[13px] font-medium text-cu-purple hover:bg-cu-hover/40"
         >
-          Show {Math.min(hidden, PAGE_SIZE)} more ({hidden} hidden)
+          {t("list.showMore", { n: Math.min(hidden, PAGE_SIZE), hidden })}
         </button>
       )}
 
@@ -331,7 +359,7 @@ type RowProps = {
   gridStyle: React.CSSProperties;
   selected: Set<string>;
   onToggleSelect: (id: string) => void;
-  onOpenTask: (id: string) => void;
+  onOpenTask: (id: string, parentId?: string) => void;
   onUpdate: (taskId: string, patch: Record<string, unknown>) => void;
 };
 
@@ -353,10 +381,11 @@ function SortableRow({ task, rowProps }: { task: TaskWithRelations; rowProps: Ro
     id: task.id,
     data: { type: "row" },
   });
+  const t = useT();
   return (
     <div
       ref={setNodeRef}
-      style={{ transform: CSS.Transform.toString(transform), transition }}
+      style={{ transform: transform ? CSS.Transform.toString(transform) : undefined, transition }}
       className={cn(isDragging && "opacity-40")}
     >
       <TaskRow
@@ -368,7 +397,7 @@ function SortableRow({ task, rowProps }: { task: TaskWithRelations; rowProps: Ro
             {...listeners}
             onClick={(e) => e.stopPropagation()}
             className="hidden cursor-grab text-cu-text-tertiary hover:text-cu-text active:cursor-grabbing group-hover:block"
-            title="Drag to reorder"
+            title={t("list.dragReorder")}
           >
             <GripVertical className="h-3.5 w-3.5" />
           </button>
@@ -395,7 +424,7 @@ function TaskRow({
   gridStyle: React.CSSProperties;
   selected: Set<string>;
   onToggleSelect: (id: string) => void;
-  onOpenTask: (id: string) => void;
+  onOpenTask: (id: string, parentId?: string) => void;
   onUpdate: (taskId: string, patch: Record<string, unknown>) => void;
   handle?: React.ReactNode;
 }) {
@@ -406,7 +435,14 @@ function TaskRow({
   const setField = useSetFieldValue(task.listId);
   const del = useDeleteTask(task.listId);
   const duplicate = useDuplicateTask(task.listId);
+  const t = useT();
   const hasSubtasks = task.subtasks.length > 0;
+  const logTime = useLogTime(task.listId);
+  const { currentUser, workspace } = useWorkspace();
+  const memberNames = useMemo(
+    () => Object.fromEntries(workspace.members.map((m) => [m.user.id, m.user.name])),
+    [workspace.members],
+  );
 
   // single click on the name opens the task; double click renames it
   function onNameClick(e: React.MouseEvent) {
@@ -494,14 +530,26 @@ function TaskRow({
           </span>
 
           <span className="ml-auto flex items-center gap-1.5 pl-2">
-            {task.tags.slice(0, 3).map((t) => (
-              <TagChip key={t.tagId} name={t.tag.name} color={t.tag.color} />
-            ))}
+            {task.module && (
+              <TagChip
+                name={task.module.name}
+                color={task.module.status.color}
+                className="max-w-[7rem] truncate"
+              />
+            )}
           </span>
         </div>
 
         <div className="py-2" onClick={(e) => e.stopPropagation()}>
           <AssigneeControl assignees={task.assignees.map((a) => a.user)} onChange={(ids) => onUpdate(task.id, { assigneeIds: ids })} />
+        </div>
+
+        <div className="py-2 text-cu-text-secondary" onClick={(e) => e.stopPropagation()}>
+          <DateControl
+            value={task.startDate}
+            onChange={(d) => onUpdate(task.id, { startDate: d ? d.toISOString() : null })}
+            placeholder=""
+          />
         </div>
 
         <div className="py-2 text-cu-text-secondary" onClick={(e) => e.stopPropagation()}>
@@ -517,6 +565,25 @@ function TaskRow({
           <PriorityControl value={task.priority} onChange={(p) => onUpdate(task.id, { priority: p })} />
         </div>
 
+        <div className="py-2 text-cu-text-secondary" onClick={(e) => e.stopPropagation()}>
+          <EstimateControl
+            minutes={task.timeEstimate}
+            onChange={(minutes) => onUpdate(task.id, { timeEstimate: minutes })}
+            compact
+          />
+        </div>
+
+        <div className="py-2 text-cu-text-secondary" onClick={(e) => e.stopPropagation()}>
+          <LoggedTimeControl
+            totalSeconds={displayLoggedTotal(task)}
+            entries={task.timeEntries ?? []}
+            currentUserId={currentUser.id}
+            byUserLabel={byUserTitle(task.loggedByUser, memberNames)}
+            onSet={(durationSeconds, workDate) => logTime.mutate({ taskId: task.id, durationSeconds, workDate })}
+            compact
+          />
+        </div>
+
         {customFields.map((f) => (
           <div key={f.id} className="py-2" onClick={(e) => e.stopPropagation()}>
             <CustomFieldControl
@@ -528,47 +595,78 @@ function TaskRow({
           </div>
         ))}
         <div className="flex justify-center py-2" onClick={(e) => e.stopPropagation()}>
-          <DropdownMenu.Root>
+          <DropdownMenu.Root modal={false}>
             <DropdownMenu.Trigger asChild>
-              <button className="hidden rounded p-1 text-cu-text-tertiary hover:bg-cu-hover hover:text-cu-text group-hover:block">
-                <Ellipsis className="h-4 w-4" />
+              <button
+                type="button"
+                className="flex h-6 w-6 items-center justify-center rounded text-cu-text-tertiary hover:bg-cu-hover hover:text-cu-text data-[state=open]:bg-cu-hover data-[state=open]:text-cu-text data-[state=open]:[&>svg]:opacity-100"
+                aria-label={t("common.more")}
+              >
+                <Ellipsis className="h-4 w-4 opacity-0 group-hover:opacity-100" />
               </button>
             </DropdownMenu.Trigger>
             <DropdownMenu.Portal>
-              <DropdownMenu.Content sideOffset={4} align="end" className="z-50 min-w-[150px] rounded-lg border border-cu-border bg-cu-panel p-1 shadow-lg">
-                <RowMenuItem icon={<Maximize2 className="h-4 w-4" />} label="Open" onSelect={() => onOpenTask(task.id)} />
-                <RowMenuItem icon={<Pencil className="h-4 w-4" />} label="Rename" onSelect={() => setRenaming(true)} />
-                <RowMenuItem icon={<Copy className="h-4 w-4" />} label="Duplicate" onSelect={() => duplicate.mutate(task.id)} />
-                <RowMenuItem icon={<Trash2 className="h-4 w-4" />} label="Delete" danger onSelect={() => del.mutate(task.id)} />
+              <DropdownMenu.Content
+                side="bottom"
+                align="end"
+                sideOffset={4}
+                className="z-50 min-w-[150px] rounded-lg border border-cu-border bg-cu-panel p-1 shadow-lg"
+              >
+                <RowMenuItem icon={<Maximize2 className="h-4 w-4" />} label={t("common.open")} onSelect={() => onOpenTask(task.id)} />
+                <RowMenuItem icon={<Pencil className="h-4 w-4" />} label={t("common.rename")} onSelect={() => setRenaming(true)} />
+                <RowMenuItem icon={<Copy className="h-4 w-4" />} label={t("common.duplicate")} onSelect={() => duplicate.mutate(task.id)} />
+                <RowMenuItem icon={<Trash2 className="h-4 w-4" />} label={t("common.delete")} danger onSelect={() => del.mutate(task.id)} />
               </DropdownMenu.Content>
             </DropdownMenu.Portal>
           </DropdownMenu.Root>
         </div>
       </div>
 
-      {expanded &&
-        task.subtasks.map((sub) => (
-          <div
-            key={sub.id}
-            className="grid cursor-pointer items-center border-t border-cu-border/40 bg-cu-sidebar/40 px-3 hover:bg-cu-hover/60"
-            style={gridStyle}
-            onClick={() => onOpenTask(sub.id)}
-          >
-            <div className="flex items-center gap-1.5 py-2 pl-8">
-              <StatusCircle status={sub.status} />
-              <span className="truncate text-[13px] text-cu-text">{sub.name}</span>
+      {expanded && (
+        <>
+          {task.subtasks.map((sub) => (
+            <div
+              key={sub.id}
+              className="group relative grid cursor-pointer items-center border-t border-cu-border/40 bg-cu-sidebar/40 px-3 hover:bg-cu-hover/60"
+              style={gridStyle}
+              onClick={() => onOpenTask(sub.id, task.id)}
+            >
+              <div className="flex items-center gap-1.5 py-2 pl-12">
+                <span className="absolute bottom-0 left-[34px] top-0 w-px bg-cu-border" />
+                <span className="absolute left-[34px] top-1/2 h-px w-2.5 bg-cu-border" />
+                <StatusCircle status={sub.status} />
+                <span className="truncate text-[13px] text-cu-text">{sub.name}</span>
+              </div>
+              <div className="py-2" onClick={(e) => e.stopPropagation()}>
+                <AssigneeControl assignees={sub.assignees.map((a) => a.user)} onChange={(ids) => onUpdate(sub.id, { assigneeIds: ids })} />
+              </div>
+              <div />
+              <div />
+              <div />
+              <div />
+              <div className="py-2" onClick={(e) => e.stopPropagation()}>
+                <LoggedTimeControl
+                  totalSeconds={displayLoggedTotal(sub)}
+                  entries={sub.timeEntries ?? []}
+                  currentUserId={currentUser.id}
+                  byUserLabel={byUserTitle(sub.loggedByUser, memberNames)}
+                  onSet={(durationSeconds, workDate) => logTime.mutate({ taskId: sub.id, durationSeconds, workDate })}
+                  compact
+                />
+              </div>
+              {customFields.map((f) => <div key={f.id} />)}
+              <div />
             </div>
-            <div className="py-2">
-              {sub.assignees.length > 0 && (
-                <AssigneeControl assignees={sub.assignees.map((a) => a.user)} onChange={() => {}} />
-              )}
-            </div>
-            <div />
-            <div />
-            {customFields.map((f) => <div key={f.id} />)}
-            <div />
-          </div>
-        ))}
+          ))}
+          <AddSubtaskRow
+            listId={task.listId}
+            parentId={task.id}
+            statusId={task.statusId}
+            gridStyle={gridStyle}
+            customFieldCount={customFields.length}
+          />
+        </>
+      )}
     </>
   );
 }
@@ -598,6 +696,75 @@ function RowMenuItem({
   );
 }
 
+function AddSubtaskRow({
+  listId,
+  parentId,
+  statusId,
+  gridStyle,
+  customFieldCount,
+}: {
+  listId: string;
+  parentId: string;
+  statusId: string;
+  gridStyle: React.CSSProperties;
+  customFieldCount: number;
+}) {
+  const create = useCreateTask(listId);
+  const [name, setName] = useState("");
+  const [open, setOpen] = useState(false);
+  const t = useT();
+
+  function submit() {
+    const trimmed = name.trim();
+    if (!trimmed) {
+      setOpen(false);
+      return;
+    }
+    create.mutate({ listId, name: trimmed, parentId, statusId });
+    setName("");
+  }
+
+  return (
+    <div className="relative grid items-center border-t border-cu-border/40 bg-cu-sidebar/20 px-3" style={gridStyle}>
+      <div className="flex items-center gap-1.5 py-1.5 pl-12">
+        <span className="absolute bottom-0 left-[34px] top-0 w-px bg-cu-border" />
+        {open ? (
+          <input
+            autoFocus
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") submit();
+              if (e.key === "Escape") setOpen(false);
+            }}
+            onBlur={submit}
+            placeholder={t("task.subtask")}
+            className="flex-1 bg-transparent text-[13px] outline-none placeholder:text-cu-text-tertiary"
+          />
+        ) : (
+          <button
+            type="button"
+            onClick={() => setOpen(true)}
+            className="flex items-center gap-1.5 text-[13px] text-cu-text-tertiary hover:text-cu-text"
+          >
+            <Plus className="h-3.5 w-3.5" /> {t("task.subtask")}
+          </button>
+        )}
+      </div>
+      <div />
+      <div />
+      <div />
+      <div />
+      <div />
+      <div />
+      {Array.from({ length: customFieldCount }).map((_, i) => (
+        <div key={i} />
+      ))}
+      <div />
+    </div>
+  );
+}
+
 function AddTaskRow({
   listId,
   statusId,
@@ -613,6 +780,7 @@ function AddTaskRow({
 }) {
   const create = useCreateTask(listId);
   const [name, setName] = useState("");
+  const t = useT();
 
   function submit() {
     const trimmed = name.trim();
@@ -627,7 +795,7 @@ function AddTaskRow({
         onClick={() => setOpen(true)}
         className="flex w-full items-center gap-1.5 border-t border-cu-border/60 px-3 py-1.5 pl-[42px] text-[13px] text-cu-text-tertiary hover:bg-cu-hover/40 hover:text-cu-text-secondary"
       >
-        <Plus className="h-3.5 w-3.5" /> Add Task
+        <Plus className="h-3.5 w-3.5" /> {t("list.addTask")}
       </button>
     );
   }
@@ -640,7 +808,7 @@ function AddTaskRow({
         onChange={(e) => setName(e.target.value)}
         onKeyDown={(e) => { if (e.key === "Enter") submit(); if (e.key === "Escape") setOpen(false); }}
         onBlur={submit}
-        placeholder="Task name"
+        placeholder={t("list.taskName")}
         className="flex-1 bg-transparent text-[13px] outline-none placeholder:text-cu-text-tertiary"
       />
     </div>

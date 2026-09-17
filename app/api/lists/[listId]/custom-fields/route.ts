@@ -4,9 +4,9 @@ import { prisma } from "@/lib/db";
 import { CustomFieldType } from "@/lib/generated/prisma/client";
 import { requireRole } from "@/lib/permissions";
 import { readJson, route } from "@/lib/api-helpers";
+import { OPTION_COLORS, fieldNeedsOptions } from "@/lib/custom-fields";
 
 type Ctx = { params: Promise<{ listId: string }> };
-const OPTION_COLORS = ["#3d8df5", "#2ecd6f", "#ff7800", "#fd71af", "#9b59b6", "#f50000"];
 
 const schema = z.object({
   name: z.string().trim().min(1, "name is required"),
@@ -22,7 +22,7 @@ export const POST = route(async (req, { params }: Ctx) => {
   await requireRole("MEMBER");
   const { name, type, options } = await readJson(req, schema);
   const last = await prisma.customField.findFirst({ where: { listId }, orderBy: { position: "desc" } });
-  const needsOptions = type === "DROPDOWN" || type === "LABELS";
+  const needsOptions = fieldNeedsOptions(type);
 
   const field = await prisma.customField.create({
     data: {

@@ -8,13 +8,14 @@ type Ctx = { params: Promise<{ id: string }> };
 
 export const DELETE = route(async (_req, { params }: Ctx) => {
   const { id } = await params;
-  await requireUser();
+  const user = await requireUser();
 
   const entry = await prisma.timeEntry.findUnique({
     where: { id },
     include: { task: { select: { listId: true } } },
   });
   if (!entry) throw new ApiError(404, "Time entry not found");
+  if (entry.userId !== user.id) throw new ApiError(403, "You can only delete your own hours.");
 
   await prisma.timeEntry.delete({ where: { id } });
   publish({ type: "list", listId: entry.task.listId });

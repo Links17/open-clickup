@@ -19,14 +19,13 @@ import {
 import { ChevronLeft, ChevronRight, Calendar as CalendarIcon, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { DueDate } from "@/components/ui/primitives";
-
-const WEEKDAYS = ["S", "M", "T", "W", "T", "F", "S"];
+import { useI18n } from "@/lib/i18n";
 
 export function DateControl({
   value,
   onChange,
   done,
-  placeholder = "Set date",
+  placeholder,
   align = "start",
   children,
 }: {
@@ -37,12 +36,14 @@ export function DateControl({
   align?: "start" | "center" | "end";
   children?: React.ReactNode;
 }) {
+  const { t, dateLocale } = useI18n();
+  const emptyLabel = placeholder === undefined ? t("date.set") : placeholder;
   const current = value ? (typeof value === "string" ? new Date(value) : value) : null;
   const [open, setOpen] = useState(false);
   const [cursor, setCursor] = useState(() => startOfMonth(current ?? new Date()));
   const days = eachDayOfInterval({
-    start: startOfWeek(startOfMonth(cursor)),
-    end: endOfWeek(endOfMonth(cursor)),
+    start: startOfWeek(startOfMonth(cursor), { locale: dateLocale }),
+    end: endOfWeek(endOfMonth(cursor), { locale: dateLocale }),
   });
 
   function pick(d: Date | null) {
@@ -62,7 +63,7 @@ export function DateControl({
               <DueDate date={current} done={done} />
             ) : (
               <span className="flex items-center gap-1 text-[13px] text-cu-text-tertiary hover:text-cu-text-secondary">
-                <CalendarIcon className="h-3.5 w-3.5" /> {placeholder}
+                <CalendarIcon className="h-3.5 w-3.5" /> {emptyLabel}
               </span>
             ))}
         </button>
@@ -77,9 +78,9 @@ export function DateControl({
           {/* quick actions */}
           <div className="mb-2 flex gap-1">
             {[
-              { label: "Today", d: 0 },
-              { label: "Tomorrow", d: 1 },
-              { label: "Next week", d: 7 },
+              { label: t("date.today"), d: 0 },
+              { label: t("date.tomorrow"), d: 1 },
+              { label: t("date.nextWeek"), d: 7 },
             ].map((q) => (
               <button
                 key={q.label}
@@ -92,7 +93,7 @@ export function DateControl({
           </div>
 
           <div className="mb-1 flex items-center justify-between px-1">
-            <span className="text-[13px] font-semibold">{format(cursor, "MMMM yyyy")}</span>
+            <span className="text-[13px] font-semibold">{format(cursor, "MMMM yyyy", { locale: dateLocale })}</span>
             <div className="flex">
               <button onClick={() => setCursor((c) => subMonths(c, 1))} className="rounded p-0.5 hover:bg-cu-hover">
                 <ChevronLeft className="h-4 w-4" />
@@ -104,8 +105,10 @@ export function DateControl({
           </div>
 
           <div className="grid grid-cols-7 text-center">
-            {WEEKDAYS.map((d, i) => (
-              <div key={i} className="py-1 text-[10px] font-semibold text-cu-text-tertiary">{d}</div>
+            {days.slice(0, 7).map((d) => (
+              <div key={+d} className="py-1 text-[10px] font-semibold text-cu-text-tertiary">
+                {format(d, "EEEEE", { locale: dateLocale })}
+              </div>
             ))}
             {days.map((day) => {
               const selected = current && isSameDay(day, current);
@@ -136,7 +139,7 @@ export function DateControl({
               onClick={() => pick(null)}
               className="mt-2 flex w-full items-center justify-center gap-1 rounded border border-cu-border py-1 text-[12px] text-cu-text-secondary hover:bg-cu-hover"
             >
-              <X className="h-3.5 w-3.5" /> Clear date
+              <X className="h-3.5 w-3.5" /> {t("date.clear")}
             </button>
           )}
         </Popover.Content>

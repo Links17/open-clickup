@@ -67,6 +67,7 @@ export type TaskPatch = {
   timeEstimate?: number | null;
   recurrence?: string | null;
   archived?: boolean;
+  moduleId?: string | null;
   assigneeIds?: string[]; // full replacement set
   tagIds?: string[]; // full replacement set
   watcherIds?: string[]; // full replacement set
@@ -91,6 +92,7 @@ export async function updateTask(taskId: string, patch: TaskPatch, actorId?: str
     data.startDate = patch.startDate ? new Date(patch.startDate) : null;
   if (patch.dueDate !== undefined)
     data.dueDate = patch.dueDate ? new Date(patch.dueDate) : null;
+  if (patch.moduleId !== undefined) data.moduleId = patch.moduleId;
 
   // collect activity-log entries for changes worth an audit trail
   const activityLog: { type: string; data: Record<string, unknown> }[] = [];
@@ -197,6 +199,7 @@ type RecurringSource = {
   dueDate: Date | null;
   timeEstimate: number | null;
   recurrence: string | null;
+  moduleId: string | null;
   assignees: { userId: string }[];
   tags: { tagId: string }[];
 };
@@ -232,6 +235,7 @@ async function spawnNextOccurrence(src: RecurringSource, actorId?: string) {
       dueDate,
       timeEstimate: src.timeEstimate,
       recurrence: src.recurrence,
+      moduleId: src.moduleId,
       createdById: actorId,
       assignees: src.assignees.length
         ? { create: src.assignees.map((a) => ({ userId: a.userId })) }

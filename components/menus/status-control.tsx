@@ -3,7 +3,15 @@
 import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
 import { Check } from "lucide-react";
 import { cn } from "@/lib/utils";
-import type { StatusModel } from "@/lib/queries";
+import type { StatusType } from "@/lib/enums";
+import { useT } from "@/lib/i18n";
+
+export type StatusLike = {
+  id: string;
+  name: string;
+  color: string;
+  type: StatusType;
+};
 
 /** ClickUp-style status circle: outline (todo), filled ring (active), check (done). */
 export function StatusCircle({
@@ -11,7 +19,7 @@ export function StatusCircle({
   size = 16,
   className,
 }: {
-  status: Pick<StatusModel, "color" | "type">;
+  status: Pick<StatusLike, "color" | "type">;
   size?: number;
   className?: string;
 }) {
@@ -47,12 +55,15 @@ export function StatusControl({
   statuses,
   onChange,
   variant = "circle",
+  onManage,
 }: {
-  current: StatusModel;
-  statuses: StatusModel[];
+  current: StatusLike;
+  statuses: StatusLike[];
   onChange: (statusId: string) => void;
   variant?: "circle" | "badge";
+  onManage?: () => void;
 }) {
+  const t = useT();
   return (
     <DropdownMenu.Root>
       <DropdownMenu.Trigger asChild>
@@ -83,7 +94,7 @@ export function StatusControl({
           onClick={(e) => e.stopPropagation()}
         >
           <div className="px-2 py-1.5 text-[11px] font-semibold uppercase tracking-wide text-cu-text-tertiary">
-            Status
+            {t("status.title")}
           </div>
           {statuses.map((s) => (
             <DropdownMenu.Item
@@ -98,6 +109,17 @@ export function StatusControl({
               {s.id === current.id && <Check className="ml-auto h-3.5 w-3.5 text-cu-purple" />}
             </DropdownMenu.Item>
           ))}
+          {onManage && (
+            <>
+              <DropdownMenu.Separator className="my-1 h-px bg-cu-border" />
+              <DropdownMenu.Item
+                onSelect={onManage}
+                className="cursor-pointer rounded px-2 py-1.5 text-[12px] text-cu-text-secondary outline-none hover:bg-cu-hover focus:bg-cu-hover"
+              >
+                {t("status.manage")}
+              </DropdownMenu.Item>
+            </>
+          )}
         </DropdownMenu.Content>
       </DropdownMenu.Portal>
     </DropdownMenu.Root>

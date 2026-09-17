@@ -1,11 +1,10 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import * as Dialog from "@radix-ui/react-dialog";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   X,
-  Expand,
   TextAlignStart,
   SquareCheckBig,
   Calendar as CalendarIcon,
@@ -18,19 +17,26 @@ import {
   Trash2,
   Reply,
   Check,
+  Boxes,
+  Clock,
+  ChevronRight,
 } from "lucide-react";
 import { apiGet, apiSend } from "@/lib/api";
+import { cn } from "@/lib/utils";
 import type { TaskDetail } from "@/lib/queries";
 import type { TaskPatch } from "@/lib/tasks";
 import { Priority } from "@/lib/enums";
+import { jumpTaskStack, openTaskStack, popTaskStack, pushTaskStack } from "@/lib/task-stack";
 import { StatusControl, StatusCircle } from "@/components/menus/status-control";
 import { PriorityControl } from "@/components/menus/priority-control";
 import { AssigneeControl } from "@/components/menus/assignee-control";
 import { DateControl } from "@/components/menus/date-control";
+import { EstimateControl } from "@/components/menus/estimate-control";
 import { RecurrenceControl } from "@/components/menus/recurrence-control";
 import { CustomFieldControl } from "@/components/views/custom-field-control";
 import { Avatar } from "@/components/ui/avatar";
 import { TagControl } from "@/components/menus/tag-control";
+import { ModuleControl } from "@/components/menus/module-control";
 import { RichEditor, RichText } from "@/components/ui/rich-editor";
 import { Checklists } from "@/components/task/checklists";
 import { CommentReactions } from "@/components/task/comment-reactions";
@@ -39,29 +45,174 @@ import { Attachments } from "@/components/task/attachments";
 import { TimeTracking } from "@/components/task/time-tracking";
 import { Dependencies } from "@/components/task/dependencies";
 import { useWorkspace } from "@/components/workspace-context";
-import { format } from "date-fns";
+import { format, type Locale } from "date-fns";
+import { displayLabel, useI18n } from "@/lib/i18n";
 
 export function TaskModal({
-  taskId,
+  stack,
   listId,
   onClose,
+  onStackChange,
+}: {
+  stack: string[];
+  listId: string;
+  onClose: () => void;
+  onStackChange: (stack: string[]) => void;
+}) {
+  const { t } = useI18n();
+  const peekId = stack.length >= 2 ? stack[stack.length - 2] : null;
+  const fullId = stack[stack.length - 1];
+  const split = !!peekId;
+  const { data: current } = useQuery({
+    queryKey: ["task", fullId],
+    queryFn: () => apiGet<TaskDetail>(`/api/tasks/${fullId}`),
+    enabled: !!fullId,
+  });
+
+  function push(id: string) {
+    onStackChange(pushTaskStack(stack, id));
+  }
+  function pop() {
+    const next = popTaskStack(stack);
+    if (next.length === 0) onClose();
+    else onStackChange(next);
+  }
+
+  return (
+    <Dialog.Root open onOpenChange={(o) => !o && onClose()}>
+      <Dialog.Portal>
+        <Dialog.Overlay className="fixed inset-0 z-40 bg-black/40 backdrop-blur-[1px]" />
+        <Dialog.Content
+          className={cn(
+            "fixed left-1/2 top-1/2 z-50 flex h-[88vh] -translate-x-1/2 -translate-y-1/2 flex-col overflow-hidden rounded-xl bg-cu-panel shadow-2xl outline-none",
+            split ? "w-[min(1400px,96vw)]" : "w-[min(1080px,94vw)]",
+          )}
+          aria-describedby={undefined}
+        >
+          <Dialog.Title className="sr-only">{t("task.details")}</Dialog.Title>
+
+          {split && (
+            <div className="flex items-center gap-1.5 border-b border-cu-border px-4 py-2 text-[13px]">
+              {current && (
+                <span className="truncate text-cu-text-tertiary">{current.list.name}</span>
+              )}
+              {stack.map((id, i) => (
+                <span key={id} className="flex min-w-0 items-center gap-1.5">
+                  <ChevronRight className="h-3.5 w-3.5 shrink-0 text-cu-text-tertiary" />
+                  <StackCrumb
+                    taskId={id}
+                    current={i === stack.length - 1}
+                    onClick={() => onStackChange(jumpTaskStack(stack, i))}
+                  />
+                </span>
+              ))}
+              <Dialog.Close
+                aria-label={t("common.close")}
+                className="ml-auto shrink-0 rounded p-1.5 text-cu-text-tertiary hover:bg-cu-hover"
+              >
+                <X className="h-4 w-4" />
+              </Dialog.Close>
+            </div>
+          )}
+
+          {split ? (
+            <div className="flex min-h-0 flex-1">
+              <div className="flex w-[360px] shrink-0 flex-col border-r border-cu-border bg-cu-sidebar/30">
+                <TaskPane
+                  key={peekId}
+                  taskId={peekId!}
+                  listId={listId}
+                  variant="peek"
+                  highlightId={fullId}
+                  onOpenTask={push}
+                  onOpenRoot={(id) => onStackChange(openTaskStack(id))}
+                />
+              </div>
+              <div className="relative flex min-w-0 flex-1 flex-col">
+                <TaskPane
+                  key={fullId}
+                  taskId={fullId}
+                  listId={listId}
+                  variant="full"
+                  closeMode="pop"
+                  onClose={pop}
+                  onOpenTask={push}
+                  onOpenRoot={(id) => onStackChange(openTaskStack(id))}
+                />
+              </div>
+            </div>
+          ) : (
+            <TaskPane
+              key={fullId}
+              taskId={fullId}
+              listId={listId}
+              variant="full"
+              closeMode="dialog"
+              onOpenTask={push}
+              onOpenRoot={(id) => onStackChange(openTaskStack(id))}
+            />
+          )}
+        </Dialog.Content>
+      </Dialog.Portal>
+    </Dialog.Root>
+  );
+}
+
+function StackCrumb({
+  taskId,
+  current,
+  onClick,
+}: {
+  taskId: string;
+  current: boolean;
+  onClick: () => void;
+}) {
+  const { data } = useQuery({
+    queryKey: ["task", taskId],
+    queryFn: () => apiGet<TaskDetail>(`/api/tasks/${taskId}`),
+  });
+  const name = data?.name ?? "…";
+  if (current) {
+    return <span className="truncate font-medium text-cu-text">{name}</span>;
+  }
+  return (
+    <button type="button" onClick={onClick} className="truncate text-cu-text-secondary hover:text-cu-text">
+      {name}
+    </button>
+  );
+}
+
+function TaskPane({
+  taskId,
+  listId,
+  variant,
+  highlightId,
+  closeMode = "none",
+  onClose,
   onOpenTask,
+  onOpenRoot,
 }: {
   taskId: string;
   listId: string;
-  onClose: () => void;
-  onOpenTask?: (id: string) => void;
+  variant: "full" | "peek";
+  highlightId?: string;
+  closeMode?: "dialog" | "pop" | "none";
+  onClose?: () => void;
+  onOpenTask: (id: string) => void;
+  onOpenRoot?: (id: string) => void;
 }) {
   const qc = useQueryClient();
   const { currentUser, workspace } = useWorkspace();
+  const { t, dateLocale } = useI18n();
   const mentions = workspace.members.map((m) => ({ id: m.user.id, label: m.user.name }));
+  const peek = variant === "peek";
   const { data: task, isLoading } = useQuery({
     queryKey: ["task", taskId],
     queryFn: () => apiGet<TaskDetail>(`/api/tasks/${taskId}`),
   });
 
   const invalidate = () => {
-    qc.invalidateQueries({ queryKey: ["task", taskId] });
+    qc.invalidateQueries({ queryKey: ["task"] });
     qc.invalidateQueries({ queryKey: ["list", listId] });
   };
 
@@ -87,215 +238,238 @@ export function TaskModal({
     onSuccess: invalidate,
   });
 
+  if (isLoading || !task) {
+    return peek ? <div className="h-full animate-pulse bg-cu-hover/40" /> : <TaskModalSkeleton />;
+  }
+
+  const subtasks = (
+    <section className={peek ? "mt-4" : "mt-6"}>
+      <h3 className="mb-2 flex items-center gap-1.5 text-[13px] font-semibold text-cu-text-secondary">
+        <SquareCheckBig className="h-4 w-4" /> {t("task.subtasks")}
+        {task.subtasks.length > 0 && (
+          <span className="text-cu-text-tertiary">{task.subtasks.length}</span>
+        )}
+      </h3>
+      <div className="rounded-lg border border-cu-border">
+        {task.subtasks.map((sub) => (
+          <button
+            key={sub.id}
+            type="button"
+            onClick={() => onOpenTask(sub.id)}
+            className={cn(
+              "flex w-full items-center gap-2 border-b border-cu-border px-3 py-2 text-left last:border-0 hover:bg-cu-hover",
+              sub.id === highlightId && "bg-cu-purple-light hover:bg-cu-purple-light",
+            )}
+          >
+            <StatusCircle status={sub.status} size={14} />
+            <span className="min-w-0 flex-1 truncate text-[13px]">{sub.name}</span>
+            <div className="ml-auto flex -space-x-1.5">
+              {sub.assignees.map((a) => (
+                <Avatar key={a.userId} user={a.user} size="sm" ring />
+              ))}
+            </div>
+          </button>
+        ))}
+        <SubtaskComposer taskId={taskId} onSubmit={(name) => addSubtask.mutate(name)} />
+      </div>
+    </section>
+  );
+
   return (
-    <Dialog.Root open onOpenChange={(o) => !o && onClose()}>
-      <Dialog.Portal>
-        <Dialog.Overlay className="fixed inset-0 z-40 bg-black/40 backdrop-blur-[1px]" />
-        <Dialog.Content
-          className="fixed left-1/2 top-1/2 z-50 flex h-[88vh] w-[min(1080px,94vw)] -translate-x-1/2 -translate-y-1/2 flex-col overflow-hidden rounded-xl bg-cu-panel shadow-2xl outline-none"
-          aria-describedby={undefined}
-        >
-          <Dialog.Title className="sr-only">Task details</Dialog.Title>
-
-          {isLoading || !task ? (
-            <TaskModalSkeleton />
-          ) : (
-            <>
-              {/* header */}
-              <div className="flex items-center gap-2 border-b border-cu-border px-4 py-2.5">
-                <StatusControl
-                  current={task.status}
-                  statuses={task.list.statuses}
-                  variant="badge"
-                  onChange={(statusId) => update.mutate({ statusId })}
-                />
-                <span className="text-[13px] text-cu-text-tertiary">in {task.list.name}</span>
-                <div className="ml-auto flex items-center gap-1">
-                  <TaskMenu taskId={taskId} defaultName={task.name} listId={listId} onOpenTask={onOpenTask} />
-                  <button aria-label="Expand" className="rounded p-1.5 text-cu-text-tertiary hover:bg-cu-hover">
-                    <Expand className="h-4 w-4" />
-                  </button>
-                  <Dialog.Close aria-label="Close" className="rounded p-1.5 text-cu-text-tertiary hover:bg-cu-hover">
-                    <X className="h-4 w-4" />
-                  </Dialog.Close>
-                </div>
-              </div>
-
-              <div className="flex min-h-0 flex-1 flex-col md:flex-row">
-                {/* main */}
-                <div className="flex min-w-0 flex-1 flex-col overflow-y-auto p-4 md:p-6">
-                  <TitleField
-                    value={task.name}
-                    onSave={(name) => update.mutate({ name })}
-                  />
-
-                  <div className="mt-3">
-                    <div className="mb-1 flex items-center gap-1.5 text-[13px] font-medium text-cu-text-secondary">
-                      <TextAlignStart className="h-4 w-4" /> Description
-                    </div>
-                    <RichEditor
-                      content={task.description ?? ""}
-                      placeholder="Add a description…"
-                      mentions={mentions}
-                      onBlur={(description) => update.mutate({ description })}
-                    />
-                  </div>
-
-                  {/* subtasks */}
-                  <section className="mt-6">
-                    <h3 className="mb-2 flex items-center gap-1.5 text-[13px] font-semibold text-cu-text-secondary">
-                      <SquareCheckBig className="h-4 w-4" /> Subtasks
-                      {task.subtasks.length > 0 && (
-                        <span className="text-cu-text-tertiary">{task.subtasks.length}</span>
-                      )}
-                    </h3>
-                    <div className="rounded-lg border border-cu-border">
-                      {task.subtasks.map((sub) => (
-                        <button
-                          key={sub.id}
-                          onClick={() => onOpenTask?.(sub.id)}
-                          className="flex w-full items-center gap-2 border-b border-cu-border px-3 py-2 text-left last:border-0 hover:bg-cu-hover disabled:cursor-default"
-                          disabled={!onOpenTask}
-                        >
-                          <StatusCircle status={sub.status} size={14} />
-                          <span className="text-[13px]">{sub.name}</span>
-                          <div className="ml-auto flex -space-x-1.5">
-                            {sub.assignees.map((a) => (
-                              <Avatar key={a.userId} user={a.user} size="sm" ring />
-                            ))}
-                          </div>
-                        </button>
-                      ))}
-                      <SubtaskComposer onSubmit={(name) => addSubtask.mutate(name)} />
-                    </div>
-                  </section>
-
-                  <Checklists taskId={taskId} checklists={task.checklists} onChange={invalidate} />
-
-                  <Attachments taskId={taskId} attachments={task.attachments} onChange={invalidate} />
-
-                  <TimeTracking
-                    taskId={taskId}
-                    currentUserId={currentUser.id}
-                    timeEstimate={task.timeEstimate}
-                    entries={task.timeEntries}
-                    onChange={invalidate}
-                  />
-
-                  <Dependencies
-                    taskId={taskId}
-                    blockedBy={task.blockedBy}
-                    blocking={task.blocking}
-                    onChange={invalidate}
-                  />
-
-                  {/* activity / comments */}
-                  <section className="mt-8">
-                    <h3 className="mb-3 text-[13px] font-semibold text-cu-text-secondary">Activity</h3>
-                    <ActivityFeed
-                      taskId={taskId}
-                      comments={task.comments}
-                      activities={task.activities}
-                      statuses={task.list.statuses}
-                      members={workspace.members.map((m) => m.user)}
-                      currentUserId={currentUser.id}
-                      mentions={mentions}
-                      onChange={invalidate}
-                    />
-
-                    <CommentComposer
-                      user={currentUser}
-                      mentions={mentions}
-                      onSubmit={(body) => addComment.mutate(body)}
-                    />
-                  </section>
-                </div>
-
-                {/* sidebar */}
-                <aside className="w-full shrink-0 overflow-y-auto border-t border-cu-border bg-cu-sidebar/40 p-4 md:w-[320px] md:border-l md:border-t-0">
-                  <DetailRow icon={<UserGlyph />} label="Assignees">
-                    <AssigneeControl
-                      assignees={task.assignees.map((a) => a.user)}
-                      onChange={(ids) => update.mutate({ assigneeIds: ids })}
-                      size="md"
-                    />
-                  </DetailRow>
-
-                  <DetailRow icon={<CalendarIcon className="h-4 w-4" />} label="Due date">
-                    <DateControl
-                      value={task.dueDate}
-                      done={task.status.type === "DONE"}
-                      onChange={(d) => update.mutate({ dueDate: d ? d.toISOString() : null })}
-                    />
-                  </DetailRow>
-
-                  <DetailRow icon={<CalendarIcon className="h-4 w-4" />} label="Start date">
-                    <DateControl
-                      value={task.startDate}
-                      onChange={(d) => update.mutate({ startDate: d ? d.toISOString() : null })}
-                    />
-                  </DetailRow>
-
-                  <DetailRow icon={<Flag className="h-4 w-4" />} label="Priority">
-                    <PriorityControl
-                      value={task.priority}
-                      onChange={(p: Priority | null) => update.mutate({ priority: p })}
-                    />
-                  </DetailRow>
-
-                  <DetailRow icon={<Repeat className="h-4 w-4" />} label="Recurring">
-                    <RecurrenceControl
-                      value={task.recurrence}
-                      onChange={(recurrence) => update.mutate({ recurrence })}
-                    />
-                  </DetailRow>
-
-                  <DetailRow icon={<TagIcon className="h-4 w-4" />} label="Tags">
-                    <TagControl
-                      spaceId={task.list.spaceId}
-                      selected={task.tags}
-                      onChange={(tagIds) => update.mutate({ tagIds })}
-                    />
-                  </DetailRow>
-
-                  <DetailRow icon={<Eye className="h-4 w-4" />} label="Watchers">
-                    <AssigneeControl
-                      assignees={task.watchers.map((w) => w.user)}
-                      onChange={(ids) => update.mutate({ watcherIds: ids })}
-                      size="md"
-                      label="Watchers"
-                    />
-                  </DetailRow>
-
-                  {/* custom fields */}
-                  {task.list.customFields.length > 0 && (
-                    <div className="mt-4 border-t border-cu-border pt-4">
-                      <div className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-cu-text-tertiary">
-                        Custom Fields
-                      </div>
-                      {task.list.customFields.map((f) => (
-                        <DetailRow key={f.id} icon={<Plus className="h-4 w-4 opacity-0" />} label={f.name}>
-                          <CustomFieldControl
-                            field={f}
-                            value={task.customFieldValues.find((cv) => cv.customFieldId === f.id)?.value}
-                            onChange={(value) => setField.mutate({ fieldId: f.id, value })}
-                          />
-                        </DetailRow>
-                      ))}
-                    </div>
-                  )}
-
-                  <div className="mt-4 border-t border-cu-border pt-4 text-[11px] text-cu-text-tertiary">
-                    {task.createdBy && <div>Created by {task.createdBy.name}</div>}
-                    <div>{format(new Date(task.createdAt), "MMM d, yyyy")}</div>
-                  </div>
-                </aside>
-              </div>
-            </>
+    <>
+      <div className="flex items-center gap-2 border-b border-cu-border px-4 py-2.5">
+        <StatusControl
+          current={task.status}
+          statuses={task.list.statuses}
+          variant="badge"
+          onChange={(statusId) => update.mutate({ statusId })}
+        />
+        {!peek && (
+          <span className="truncate text-[13px] text-cu-text-tertiary">{t("task.inList", { name: task.list.name })}</span>
+        )}
+        <div className="ml-auto flex items-center gap-1">
+          {!peek && (
+            <TaskMenu taskId={taskId} defaultName={task.name} listId={listId} onOpenTask={onOpenRoot ?? onOpenTask} />
           )}
-        </Dialog.Content>
-      </Dialog.Portal>
-    </Dialog.Root>
+          {closeMode === "dialog" && (
+            <Dialog.Close aria-label={t("common.close")} className="rounded p-1.5 text-cu-text-tertiary hover:bg-cu-hover">
+              <X className="h-4 w-4" />
+            </Dialog.Close>
+          )}
+          {closeMode === "pop" && (
+            <button
+              type="button"
+              onClick={onClose}
+              aria-label={t("task.closeSubtask")}
+              className="rounded p-1.5 text-cu-text-tertiary hover:bg-cu-hover"
+            >
+              <X className="h-4 w-4" />
+            </button>
+          )}
+        </div>
+      </div>
+
+      {peek ? (
+        <div className="flex min-h-0 flex-1 flex-col overflow-y-auto p-4">
+          <TitleField taskId={taskId} value={task.name} compact onSave={(name) => update.mutate({ name })} />
+          {subtasks}
+        </div>
+      ) : (
+        <div className="flex min-h-0 flex-1 flex-col md:flex-row">
+          <div className="flex min-w-0 flex-1 flex-col overflow-y-auto p-4 md:p-6">
+            <TitleField taskId={taskId} value={task.name} onSave={(name) => update.mutate({ name })} />
+
+            <div className="mt-3">
+              <div className="mb-1 flex items-center gap-1.5 text-[13px] font-medium text-cu-text-secondary">
+                <TextAlignStart className="h-4 w-4" /> {t("task.descriptionLabel")}
+              </div>
+              <RichEditor
+                content={task.description ?? ""}
+                placeholder={t("task.description")}
+                mentions={mentions}
+                onBlur={(description) => update.mutate({ description })}
+              />
+            </div>
+
+            {subtasks}
+
+            <Checklists taskId={taskId} checklists={task.checklists} onChange={invalidate} />
+
+            <Attachments taskId={taskId} attachments={task.attachments} onChange={invalidate} />
+
+            <TimeTracking
+              taskId={taskId}
+              currentUserId={currentUser.id}
+              timeEstimate={task.timeEstimate}
+              entries={task.timeEntries}
+              subtreeEntries={task.subtreeEntries}
+              loggedTotal={task.loggedTotal}
+              loggedByUser={task.loggedByUser}
+              onChange={invalidate}
+            />
+
+            <Dependencies
+              taskId={taskId}
+              blockedBy={task.blockedBy}
+              blocking={task.blocking}
+              onChange={invalidate}
+            />
+
+            <section className="mt-8">
+              <h3 className="mb-3 text-[13px] font-semibold text-cu-text-secondary">{t("task.activity")}</h3>
+              <ActivityFeed
+                taskId={taskId}
+                comments={task.comments}
+                activities={task.activities}
+                statuses={task.list.statuses}
+                members={workspace.members.map((m) => m.user)}
+                currentUserId={currentUser.id}
+                mentions={mentions}
+                onChange={invalidate}
+              />
+
+              <CommentComposer
+                user={currentUser}
+                mentions={mentions}
+                onSubmit={(body) => addComment.mutate(body)}
+              />
+            </section>
+          </div>
+
+          <aside className="w-full shrink-0 overflow-y-auto border-t border-cu-border bg-cu-sidebar/40 p-4 md:w-[320px] md:border-l md:border-t-0">
+            <DetailRow icon={<UserGlyph />} label={t("task.assignees")}>
+              <AssigneeControl
+                assignees={task.assignees.map((a) => a.user)}
+                onChange={(ids) => update.mutate({ assigneeIds: ids })}
+                size="md"
+              />
+            </DetailRow>
+
+            <DetailRow icon={<CalendarIcon className="h-4 w-4" />} label={t("task.dueDate")}>
+              <DateControl
+                value={task.dueDate}
+                done={task.status.type === "DONE"}
+                onChange={(d) => update.mutate({ dueDate: d ? d.toISOString() : null })}
+              />
+            </DetailRow>
+
+            <DetailRow icon={<CalendarIcon className="h-4 w-4" />} label={t("task.startDate")}>
+              <DateControl
+                value={task.startDate}
+                onChange={(d) => update.mutate({ startDate: d ? d.toISOString() : null })}
+              />
+            </DetailRow>
+
+            <DetailRow icon={<Flag className="h-4 w-4" />} label={t("task.priority")}>
+              <PriorityControl
+                value={task.priority}
+                onChange={(p: Priority | null) => update.mutate({ priority: p })}
+              />
+            </DetailRow>
+
+            <DetailRow icon={<Clock className="h-4 w-4" />} label={t("col.estimate")}>
+              <EstimateControl
+                minutes={task.timeEstimate}
+                onChange={(timeEstimate) => update.mutate({ timeEstimate })}
+              />
+            </DetailRow>
+
+            <DetailRow icon={<Boxes className="h-4 w-4" />} label={t("task.module")}>
+              <ModuleControl
+                value={task.module}
+                onChange={(moduleId) => update.mutate({ moduleId })}
+              />
+            </DetailRow>
+
+            <DetailRow icon={<Repeat className="h-4 w-4" />} label={t("task.recurring")}>
+              <RecurrenceControl
+                value={task.recurrence}
+                onChange={(recurrence) => update.mutate({ recurrence })}
+              />
+            </DetailRow>
+
+            <DetailRow icon={<TagIcon className="h-4 w-4" />} label={t("task.tags")}>
+              <TagControl
+                spaceId={task.list.spaceId}
+                selected={task.tags}
+                onChange={(tagIds) => update.mutate({ tagIds })}
+              />
+            </DetailRow>
+
+            <DetailRow icon={<Eye className="h-4 w-4" />} label={t("task.watchers")}>
+              <AssigneeControl
+                assignees={task.watchers.map((w) => w.user)}
+                onChange={(ids) => update.mutate({ watcherIds: ids })}
+                size="md"
+                label={t("task.watchers")}
+              />
+            </DetailRow>
+
+            {task.list.customFields.length > 0 && (
+              <div className="mt-4 border-t border-cu-border pt-4">
+                <div className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-cu-text-tertiary">
+                  {t("task.customFields")}
+                </div>
+                {task.list.customFields.map((f) => (
+                  <DetailRow key={f.id} icon={<Plus className="h-4 w-4 opacity-0" />} label={displayLabel(t, f.name)}>
+                    <CustomFieldControl
+                      field={f}
+                      value={task.customFieldValues.find((cv) => cv.customFieldId === f.id)?.value}
+                      onChange={(value) => setField.mutate({ fieldId: f.id, value })}
+                    />
+                  </DetailRow>
+                ))}
+              </div>
+            )}
+
+            <div className="mt-4 border-t border-cu-border pt-4 text-[11px] text-cu-text-tertiary">
+              {task.createdBy && <div>{t("task.createdBy", { name: task.createdBy.name })}</div>}
+              <div>{format(new Date(task.createdAt), "PPP", { locale: dateLocale })}</div>
+            </div>
+          </aside>
+        </div>
+      )}
+    </>
   );
 }
 
@@ -331,37 +505,76 @@ function TaskModalSkeleton() {
   );
 }
 
-function TitleField({ value, onSave }: { value: string; onSave: (v: string) => void }) {
+function TitleField({
+  taskId,
+  value,
+  onSave,
+  compact,
+}: {
+  taskId: string;
+  value: string;
+  onSave: (v: string) => void;
+  compact?: boolean;
+}) {
   const [v, setV] = useState(value);
+  const ref = useRef<HTMLTextAreaElement>(null);
+  const { t } = useI18n();
+  useEffect(() => {
+    setV(value);
+  }, [taskId, value]);
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    el.style.height = "0px";
+    el.style.height = `${el.scrollHeight}px`;
+  }, [v]);
   return (
     <textarea
+      ref={ref}
       value={v}
       onChange={(e) => setV(e.target.value)}
       onBlur={() => v.trim() && v !== value && onSave(v.trim())}
       rows={1}
-      className="w-full shrink-0 resize-none text-2xl font-semibold text-cu-text outline-none placeholder:text-cu-text-tertiary"
-      placeholder="Task name"
+      className={cn(
+        "w-full resize-none overflow-hidden bg-transparent font-semibold leading-snug text-cu-text outline-none placeholder:text-cu-text-tertiary",
+        compact ? "text-[15px]" : "text-lg",
+      )}
+      placeholder={t("list.taskName")}
     />
   );
 }
 
-function SubtaskComposer({ onSubmit }: { onSubmit: (name: string) => void }) {
+function SubtaskComposer({ taskId, onSubmit }: { taskId: string; onSubmit: (name: string) => void }) {
   const [v, setV] = useState("");
+  const { t } = useI18n();
+  useEffect(() => {
+    setV("");
+  }, [taskId]);
+  function submit() {
+    if (!v.trim()) return;
+    onSubmit(v.trim());
+    setV("");
+  }
   return (
     <div className="flex items-center gap-2 px-3 py-2">
-      <Plus className="h-4 w-4 text-cu-text-tertiary" />
+      <Plus className="h-4 w-4 shrink-0 text-cu-text-tertiary" />
       <input
         value={v}
         onChange={(e) => setV(e.target.value)}
         onKeyDown={(e) => {
-          if (e.key === "Enter" && v.trim()) {
-            onSubmit(v.trim());
-            setV("");
-          }
+          if (e.key === "Enter") submit();
         }}
-        placeholder="Add a subtask"
+        placeholder={t("task.subtask")}
         className="flex-1 bg-transparent text-[13px] outline-none placeholder:text-cu-text-tertiary"
       />
+      <button
+        type="button"
+        onClick={submit}
+        disabled={!v.trim()}
+        className="shrink-0 rounded px-2 py-0.5 text-[12px] font-medium text-cu-purple hover:bg-cu-hover disabled:opacity-40"
+      >
+        {t("task.addSubtask")}
+      </button>
     </div>
   );
 }
@@ -372,32 +585,40 @@ function activityText(
   a: ActivityRecord,
   statusName: (id: string) => string | undefined,
   memberName: (id: string) => string,
+  t: (key: string, vars?: Record<string, string | number>) => string,
+  dateLocale: Locale,
 ): string {
   const d = (a.data ?? {}) as Record<string, unknown>;
   const names = (ids: unknown) => (Array.isArray(ids) ? ids.map((id) => memberName(String(id))).join(", ") : "");
   switch (a.type) {
     case "created":
-      return d.fromTemplate ? `created this task from “${String(d.fromTemplate)}”` : "created this task";
+      return d.fromTemplate
+        ? t("activity.createdFrom", { name: String(d.fromTemplate) })
+        : t("activity.created");
     case "status_changed": {
       const name = typeof d.toId === "string" ? statusName(d.toId) : undefined;
-      return name ? `set status to ${name}` : "changed the status";
+      return name ? t("activity.setStatus", { name }) : t("activity.changedStatus");
     }
     case "renamed":
-      return d.name ? `renamed this task to “${String(d.name)}”` : "renamed this task";
-    case "priority_changed":
-      return d.priority
-        ? `set priority to ${String(d.priority).charAt(0) + String(d.priority).slice(1).toLowerCase()}`
-        : "cleared the priority";
+      return d.name ? t("activity.renamedTo", { name: String(d.name) }) : t("activity.renamed");
+    case "priority_changed": {
+      const p = typeof d.priority === "string" ? d.priority : "";
+      return p
+        ? t("activity.setPriority", { name: t(`priority.${p}`) === `priority.${p}` ? p : t(`priority.${p}`) })
+        : t("activity.clearedPriority");
+    }
     case "due_changed":
-      return d.dueDate ? `set the due date to ${format(new Date(String(d.dueDate)), "MMM d")}` : "cleared the due date";
+      return d.dueDate
+        ? t("activity.setDue", { date: format(new Date(String(d.dueDate)), "MMM d", { locale: dateLocale }) })
+        : t("activity.clearedDue");
     case "assignee_added":
-      return `assigned ${names(d.userIds)}`;
+      return t("activity.assigned", { names: names(d.userIds) });
     case "assignee_removed":
-      return `unassigned ${names(d.userIds)}`;
+      return t("activity.unassigned", { names: names(d.userIds) });
     case "attachment_added":
-      return d.name ? `attached ${String(d.name)}` : "added an attachment";
+      return d.name ? t("activity.attached", { name: String(d.name) }) : t("activity.addedAttachment");
     case "moved":
-      return d.toList ? `moved this task to ${String(d.toList)}` : "moved this task";
+      return d.toList ? t("activity.movedTo", { name: String(d.toList) }) : t("activity.moved");
     default:
       return a.type.replace(/_/g, " ");
   }
@@ -412,6 +633,7 @@ function ActivityLine({
   statusName: (id: string) => string | undefined;
   memberName: (id: string) => string;
 }) {
+  const { t, dateLocale } = useI18n();
   return (
     <div className="flex items-center gap-2 text-[12px] text-cu-text-tertiary">
       {activity.user ? (
@@ -420,10 +642,10 @@ function ActivityLine({
         <span className="h-6 w-6 shrink-0 rounded-full bg-cu-hover-strong" />
       )}
       <span className="min-w-0 flex-1 truncate">
-        <span className="font-medium text-cu-text-secondary">{activity.user?.name ?? "Someone"}</span>{" "}
-        {activityText(activity, statusName, memberName)}
+        <span className="font-medium text-cu-text-secondary">{activity.user?.name ?? t("task.someone")}</span>{" "}
+        {activityText(activity, statusName, memberName, t, dateLocale)}
       </span>
-      <span className="shrink-0">{format(new Date(activity.createdAt), "MMM d, h:mm a")}</span>
+      <span className="shrink-0">{format(new Date(activity.createdAt), "MMM d, p", { locale: dateLocale })}</span>
     </div>
   );
 }
@@ -448,7 +670,8 @@ function ActivityFeed({
   onChange: () => void;
 }) {
   const statusName = (id: string) => statuses.find((s) => s.id === id)?.name;
-  const memberName = (id: string) => members.find((m) => m.id === id)?.name ?? "someone";
+  const { t } = useI18n();
+  const memberName = (id: string) => members.find((m) => m.id === id)?.name ?? t("task.someone");
 
   // group replies under their parent; only top-level comments enter the timeline
   const repliesByParent = new Map<string, TaskDetail["comments"]>();
@@ -470,7 +693,7 @@ function ActivityFeed({
   ].sort((x, y) => x.at - y.at);
 
   if (feed.length === 0) {
-    return <p className="text-[13px] text-cu-text-tertiary">No activity yet.</p>;
+    return <p className="text-[13px] text-cu-text-tertiary">{t("task.noActivity")}</p>;
   }
 
   return (
@@ -514,6 +737,7 @@ function CommentItem({
   const [html, setHtml] = useState(comment.body);
   const [replyHtml, setReplyHtml] = useState("");
   const isOwn = comment.user.id === currentUserId;
+  const { t, dateLocale } = useI18n();
 
   const save = useMutation({
     mutationFn: (body: string) => apiSend(`/api/comments/${comment.id}`, "PATCH", { body }),
@@ -546,11 +770,11 @@ function CommentItem({
         <div className="flex items-baseline gap-2">
           <span className="text-[13px] font-semibold">{comment.user.name}</span>
           <span className="text-[11px] text-cu-text-tertiary">
-            {format(new Date(comment.createdAt), "MMM d, h:mm a")}
+            {format(new Date(comment.createdAt), "MMM d, p", { locale: dateLocale })}
           </span>
           {comment.resolved && (
             <span className="flex items-center gap-0.5 rounded-full bg-[#6bc950]/20 px-1.5 py-px text-[10px] font-semibold text-[#6bc950]">
-              <Check className="h-3 w-3" /> Resolved
+              <Check className="h-3 w-3" /> {t("task.resolved")}
             </span>
           )}
           {isOwn && !editing && (
@@ -560,14 +784,14 @@ function CommentItem({
                   setHtml(comment.body);
                   setEditing(true);
                 }}
-                aria-label="Edit comment"
+                aria-label={t("task.editComment")}
                 className="rounded p-1 text-cu-text-tertiary hover:bg-cu-hover hover:text-cu-text"
               >
                 <Pencil className="h-3.5 w-3.5" />
               </button>
               <button
                 onClick={() => del.mutate()}
-                aria-label="Delete comment"
+                aria-label={t("task.deleteComment")}
                 className="rounded p-1 text-cu-text-tertiary hover:bg-cu-hover hover:text-cu-urgent"
               >
                 <Trash2 className="h-3.5 w-3.5" />
@@ -583,13 +807,13 @@ function CommentItem({
                 onClick={() => html && html !== "<p></p>" && save.mutate(html)}
                 className="rounded bg-cu-purple px-2.5 py-1 text-[12px] font-medium text-white hover:bg-cu-purple-dark"
               >
-                Save
+                {t("common.save")}
               </button>
               <button
                 onClick={() => setEditing(false)}
                 className="rounded px-2.5 py-1 text-[12px] text-cu-text-secondary hover:bg-cu-hover"
               >
-                Cancel
+                {t("common.cancel")}
               </button>
             </div>
           </div>
@@ -608,7 +832,7 @@ function CommentItem({
                   onClick={() => setReplying((r) => !r)}
                   className="flex items-center gap-1 rounded px-1 py-0.5 text-[11px] text-cu-text-tertiary hover:text-cu-purple"
                 >
-                  <Reply className="h-3 w-3" /> Reply
+                  <Reply className="h-3 w-3" /> {t("task.replyBtn")}
                 </button>
               )}
               {taskId && (
@@ -616,7 +840,7 @@ function CommentItem({
                   onClick={() => resolve.mutate(!comment.resolved)}
                   className="flex items-center gap-1 rounded px-1 py-0.5 text-[11px] text-cu-text-tertiary hover:text-[#6bc950]"
                 >
-                  <Check className="h-3 w-3" /> {comment.resolved ? "Reopen" : "Resolve"}
+                  <Check className="h-3 w-3" /> {comment.resolved ? t("task.reopen") : t("task.resolve")}
                 </button>
               )}
             </div>
@@ -637,20 +861,20 @@ function CommentItem({
 
             {replying && taskId && (
               <div className="mt-2 border-l-2 border-cu-border pl-3">
-                <RichEditor content="" placeholder="Write a reply…" mentions={mentions} onChange={setReplyHtml} />
+                <RichEditor content="" placeholder={t("task.reply")} mentions={mentions} onChange={setReplyHtml} />
                 <div className="mt-1.5 flex gap-2">
                   <button
                     onClick={() => replyHtml && replyHtml !== "<p></p>" && reply.mutate(replyHtml)}
                     disabled={reply.isPending}
                     className="rounded bg-cu-purple px-2.5 py-1 text-[12px] font-medium text-white hover:bg-cu-purple-dark disabled:opacity-40"
                   >
-                    Reply
+                    {t("task.replyBtn")}
                   </button>
                   <button
                     onClick={() => setReplying(false)}
                     className="rounded px-2.5 py-1 text-[12px] text-cu-text-secondary hover:bg-cu-hover"
                   >
-                    Cancel
+                    {t("common.cancel")}
                   </button>
                 </div>
               </div>
@@ -674,6 +898,7 @@ function CommentComposer({
   const [html, setHtml] = useState("");
   const [resetKey, setResetKey] = useState(0);
   const empty = !html || html === "<p></p>";
+  const { t } = useI18n();
   function submit() {
     if (empty) return;
     onSubmit(html);
@@ -684,14 +909,14 @@ function CommentComposer({
     <div className="mt-4 flex gap-2.5">
       <Avatar user={user} size="lg" />
       <div className="flex-1">
-        <RichEditor key={resetKey} content="" placeholder="Write a comment…" mentions={mentions} onChange={setHtml} />
+        <RichEditor key={resetKey} content="" placeholder={t("task.comment")} mentions={mentions} onChange={setHtml} />
         <div className="mt-1.5 flex justify-end">
           <button
             onClick={submit}
             disabled={empty}
             className="rounded bg-cu-purple px-3 py-1 text-[13px] font-medium text-white disabled:opacity-40 hover:bg-cu-purple-dark"
           >
-            Comment
+            {t("task.commentBtn")}
           </button>
         </div>
       </div>

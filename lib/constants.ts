@@ -25,3 +25,8 @@ export const SPACE_COLORS = [
   "#7b68ee", "#fd71af", "#ff5722", "#ff7800", "#f9d900",
   "#2ecd6f", "#1bbc9c", "#0ab1e8", "#3d8df5", "#9b59b6",
 ];
+
+export const STATUS_PALETTE = [
+  "#87909e", "#5b9fff", "#a875ff", "#6bc950", "#f50000", "#ff7800",
+  "#ffcc00", "#fd71af", "#1bbc9c", "#0ab1e8", "#9b59b6", "#656f7d",
+];

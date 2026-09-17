@@ -9,6 +9,7 @@ import { Ellipsis, BookmarkPlus, Check, Copy, FolderInput } from "lucide-react";
 import { apiSend } from "@/lib/api";
 import { useSaveTemplate, useDuplicateTask } from "@/lib/hooks";
 import { useWorkspace } from "@/components/workspace-context";
+import { useT } from "@/lib/i18n";
 
 export function TaskMenu({
   taskId,
@@ -31,6 +32,7 @@ export function TaskMenu({
   const otherLists = workspace.spaces
     .flatMap((s) => [...s.lists, ...s.folders.flatMap((f) => f.lists)])
     .filter((l) => l.id !== listId);
+  const t = useT();
   const move = useMutation({
     mutationFn: (toListId: string) => apiSend<{ listId: string }>(`/api/tasks/${taskId}/move`, "POST", { listId: toListId }),
     onSuccess: (r) => router.push(`/l/${r.listId}?task=${taskId}`),
@@ -56,7 +58,7 @@ export function TaskMenu({
     <>
       <DropdownMenu.Root>
         <DropdownMenu.Trigger asChild>
-          <button className="rounded p-1.5 text-cu-text-tertiary hover:bg-cu-hover" title="More">
+          <button className="rounded p-1.5 text-cu-text-tertiary hover:bg-cu-hover" title={t("common.more")}>
             <Ellipsis className="h-4 w-4" />
           </button>
         </DropdownMenu.Trigger>
@@ -72,12 +74,12 @@ export function TaskMenu({
               }
               className="flex cursor-pointer items-center gap-2 rounded px-2 py-1.5 text-[13px] outline-none hover:bg-cu-hover focus:bg-cu-hover"
             >
-              <Copy className="h-4 w-4" /> Duplicate task
+              <Copy className="h-4 w-4" /> {t("template.duplicate")}
             </DropdownMenu.Item>
             {otherLists.length > 0 && (
               <DropdownMenu.Sub>
                 <DropdownMenu.SubTrigger className="flex cursor-pointer items-center gap-2 rounded px-2 py-1.5 text-[13px] outline-none hover:bg-cu-hover focus:bg-cu-hover data-[state=open]:bg-cu-hover">
-                  <FolderInput className="h-4 w-4" /> Move to list
+                  <FolderInput className="h-4 w-4" /> {t("template.moveTo")}
                 </DropdownMenu.SubTrigger>
                 <DropdownMenu.Portal>
                   <DropdownMenu.SubContent
@@ -104,7 +106,7 @@ export function TaskMenu({
               }}
               className="flex cursor-pointer items-center gap-2 rounded px-2 py-1.5 text-[13px] outline-none hover:bg-cu-hover focus:bg-cu-hover"
             >
-              <BookmarkPlus className="h-4 w-4" /> Save as template
+              <BookmarkPlus className="h-4 w-4" /> {t("template.saveAs")}
             </DropdownMenu.Item>
           </DropdownMenu.Content>
         </DropdownMenu.Portal>
@@ -114,21 +116,21 @@ export function TaskMenu({
         <Dialog.Portal>
           <Dialog.Overlay className="fixed inset-0 z-[60] bg-black/40" />
           <Dialog.Content className="fixed left-1/2 top-1/2 z-[60] w-[min(380px,92vw)] -translate-x-1/2 -translate-y-1/2 rounded-xl bg-cu-panel p-4 shadow-2xl outline-none">
-            <Dialog.Title className="text-[14px] font-semibold text-cu-text">Save as template</Dialog.Title>
+            <Dialog.Title className="text-[14px] font-semibold text-cu-text">{t("template.saveAs")}</Dialog.Title>
             <p className="mt-1 text-[12px] text-cu-text-tertiary">
-              Captures the title, description, priority, and checklists.
+              {t("template.captureHint")}
             </p>
             <input
               autoFocus
               value={name}
               onChange={(e) => setName(e.target.value)}
               onKeyDown={(e) => e.key === "Enter" && submit()}
-              placeholder="Template name"
+              placeholder={t("template.name")}
               className="mt-3 w-full rounded-md border border-cu-border bg-cu-bg px-2.5 py-1.5 text-[13px] outline-none focus:border-cu-purple"
             />
             <div className="mt-3 flex justify-end gap-2">
               <Dialog.Close className="rounded-md px-3 py-1.5 text-[13px] text-cu-text-secondary hover:bg-cu-hover">
-                Cancel
+                {t("common.cancel")}
               </Dialog.Close>
               <button
                 onClick={submit}
@@ -137,10 +139,10 @@ export function TaskMenu({
               >
                 {saved ? (
                   <>
-                    <Check className="h-4 w-4" /> Saved
+                    <Check className="h-4 w-4" /> {t("template.saved")}
                   </>
                 ) : (
-                  "Save template"
+                  t("template.save")
                 )}
               </button>
             </div>

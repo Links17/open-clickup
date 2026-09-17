@@ -11,7 +11,7 @@ const inter = Inter({
 
 export const metadata: Metadata = {
   title: "Open ClickUp",
-  description: "Project management, your way.",
+  description: "项目管理，按你的方式。",
 };
 
 export default function RootLayout({
@@ -20,11 +20,11 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en" className={`${inter.variable} h-full`} suppressHydrationWarning>
+    <html lang="zh-CN" className={`${inter.variable} h-full`} suppressHydrationWarning>
       <head>
         <script
           dangerouslySetInnerHTML={{
-            __html: `try{if(localStorage.getItem('cu-theme')==='dark')document.documentElement.classList.add('dark')}catch(e){}`,
+            __html: `try{if(localStorage.getItem('cu-theme')==='dark')document.documentElement.classList.add('dark')}catch(e){}try{var l=localStorage.getItem('cu-locale');document.documentElement.lang=l==='en'?'en':'zh-CN'}catch(e){document.documentElement.lang='zh-CN'}`,
           }}
         />
       </head>

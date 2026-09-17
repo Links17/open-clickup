@@ -16,6 +16,7 @@ import type { TaskPatch } from "@/lib/tasks";
 import { useUpdateTask } from "@/lib/hooks";
 import { StatusCircle } from "@/components/menus/status-control";
 import { AvatarStack } from "@/components/ui/avatar";
+import { useI18n } from "@/lib/i18n";
 
 function noonISO(d: Date): string {
   const x = new Date(d);
@@ -57,6 +58,7 @@ export function GanttView({
   const dependencies = data.dependencies;
   const update = useUpdateTask(data.list.id);
   const reschedule = (taskId: string, patch: TaskPatch) => update.mutate({ taskId, patch });
+  const { t, dateLocale } = useI18n();
 
   const { start, days } = useMemo(() => {
     const dates: Date[] = [];
@@ -94,13 +96,13 @@ export function GanttView({
   const months = useMemo(() => {
     const out: { label: string; span: number }[] = [];
     for (const d of days) {
-      const label = format(d, "MMMM yyyy");
+      const label = format(d, "MMMM yyyy", { locale: dateLocale });
       const last = out[out.length - 1];
       if (last && last.label === label) last.span += 1;
       else out.push({ label, span: 1 });
     }
     return out;
-  }, [days]);
+  }, [days, dateLocale]);
 
   return (
     <div className="flex-1 overflow-auto">
@@ -112,7 +114,7 @@ export function GanttView({
             style={{ width: NAME_W }}
           >
             <div className="flex h-[44px] items-end px-3 pb-1 text-[11px] font-semibold uppercase tracking-wide text-cu-text-tertiary">
-              Name
+              {t("col.name")}
             </div>
           </div>
           <div>
@@ -139,7 +141,7 @@ export function GanttView({
                   )}
                   style={{ width: DAY_W }}
                 >
-                  <div className="pt-0.5">{format(d, "EEEEE")}</div>
+                  <div className="pt-0.5">{format(d, "EEEEE", { locale: dateLocale })}</div>
                   <div className={cn(isToday(d) && "mx-auto flex h-4 w-4 items-center justify-center rounded-full bg-cu-purple text-white")}>
                     {format(d, "d")}
                   </div>

@@ -8,6 +8,8 @@ import { WorkspaceProvider } from "@/components/workspace-context";
 import { Sidebar } from "@/components/sidebar/sidebar";
 import { CommandPalette } from "@/components/command-palette";
 import { ShortcutsHelp } from "@/components/shortcuts-help";
+import { ToastProvider } from "@/components/ui/toast";
+import { useT } from "@/lib/i18n";
 
 function isTyping(target: EventTarget | null): boolean {
   const el = target as HTMLElement | null;
@@ -22,6 +24,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const [helpOpen, setHelpOpen] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
   const pathname = usePathname();
+  const t = useT();
   useRealtime();
 
   // close the mobile drawer whenever the route changes
@@ -63,12 +66,13 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   if (error || !data)
     return (
       <div className="flex h-full items-center justify-center text-sm text-cu-text-secondary">
-        Failed to load workspace. Is the database seeded? (`pnpm db:seed`)
+        {t("boot.failed")}
       </div>
     );
 
   return (
     <WorkspaceProvider data={data}>
+      <ToastProvider>
       <div className="flex h-full w-full overflow-hidden">
         {/* Desktop sidebar (collapsible) */}
         <div className="hidden md:flex">
@@ -76,7 +80,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             <button
               onClick={() => setCollapsed(false)}
               className="absolute left-2 top-2 z-20 rounded p-1.5 text-cu-text-secondary hover:bg-cu-hover-strong"
-              title="Open sidebar"
+              title={t("nav.openSidebar")}
             >
               <PanelLeft className="h-4 w-4" />
             </button>
@@ -101,7 +105,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             <button
               onClick={() => setMobileOpen(true)}
               className="rounded p-1.5 text-cu-text-secondary hover:bg-cu-hover-strong"
-              title="Open menu"
+              title={t("nav.openMenu")}
             >
               <Menu className="h-5 w-5" />
             </button>
@@ -112,6 +116,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         <CommandPalette open={paletteOpen} onClose={() => setPaletteOpen(false)} />
         <ShortcutsHelp open={helpOpen} onClose={() => setHelpOpen(false)} />
       </div>
+      </ToastProvider>
     </WorkspaceProvider>
   );
 }

@@ -79,15 +79,18 @@ model Session {
 }
 
 model Workspace {
-  id        String   @id @default(cuid())
-  name      String
-  color     String   @default("#7b68ee")
-  avatarUrl String?
-  createdAt DateTime @default(now())
+  id                   String   @id @default(cuid())
+  name                 String
+  color                String   @default("#7b68ee")
+  avatarUrl            String?
+  dailyHourCapMinutes  Int      @default(600) // per-person per calendar day
+  createdAt            DateTime @default(now())
 
   members   WorkspaceMember[]
   spaces    Space[]
   templates TaskTemplate[]
+  modules   FeatureModule[]
+  moduleStatuses WorkspaceModuleStatus[]
 }
 
 model TaskTemplate {
@@ -101,6 +104,45 @@ model TaskTemplate {
   createdAt   DateTime  @default(now())
 
   workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@index([workspaceId])
+}
+
+// ----------------------------------------------------------------------------
+// Feature modules (workspace-level architecture tree)
+// ----------------------------------------------------------------------------
+
+model FeatureModule {
+  id          String   @id @default(cuid())
+  workspaceId String
+  parentId    String?
+  statusId    String
+  name        String
+  position    Float    @default(0)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  workspace Workspace              @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  parent    FeatureModule?         @relation("ModuleTree", fields: [parentId], references: [id], onDelete: Cascade)
+  children  FeatureModule[]        @relation("ModuleTree")
+  status    WorkspaceModuleStatus  @relation(fields: [statusId], references: [id], onDelete: Restrict)
+  tasks     Task[]
+
+  @@index([workspaceId])
+  @@index([parentId])
+  @@index([statusId])
+}
+
+model WorkspaceModuleStatus {
+  id          String     @id @default(cuid())
+  workspaceId String
+  name        String
+  color       String     @default("#87909e")
+  type        StatusType @default(NOT_STARTED)
+  position    Float      @default(0)
+
+  workspace Workspace       @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  modules   FeatureModule[]
 
   @@index([workspaceId])
 }
@@ -233,6 +275,7 @@ model Task {
   dueDate      DateTime?
   timeEstimate Int? // minutes
   recurrence   String? // null | DAILY | WEEKLY | BIWEEKLY | MONTHLY | WEEKDAYS
+  moduleId     String?
   createdById  String?
   createdAt    DateTime  @default(now())
   updatedAt    DateTime  @updatedAt
@@ -244,6 +287,7 @@ model Task {
   parent            Task?              @relation("Subtasks", fields: [parentId], references: [id], onDelete: Cascade)
   subtasks          Task[]             @relation("Subtasks")
   createdBy         User?              @relation("TaskCreatedBy", fields: [createdById], references: [id])
+  module            FeatureModule?     @relation(fields: [moduleId], references: [id], onDelete: SetNull)
   assignees         TaskAssignee[]
   tags              TaskTag[]
   watchers          TaskWatcher[]
@@ -260,6 +304,7 @@ model Task {
   @@index([listId])
   @@index([statusId])
   @@index([parentId])
+  @@index([moduleId])
 }
 
 model TaskAssignee {
@@ -494,6 +539,7 @@ model TimeEntry {
   id          String    @id @default(cuid())
   taskId      String
   userId      String
+  workDate    DateTime  @db.Date // calendar day; one row per (task, user, day)
   duration    Int       @default(0) // seconds (final, for stopped/manual entries)
   description String?
   startedAt   DateTime  @default(now())
@@ -503,8 +549,10 @@ model TimeEntry {
   task Task @relation(fields: [taskId], references: [id], onDelete: Cascade)
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
+  @@unique([taskId, userId, workDate])
   @@index([taskId])
   @@index([userId])
+  @@index([userId, workDate])
 }
 
 // ----------------------------------------------------------------------------

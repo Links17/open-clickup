@@ -5,6 +5,7 @@ import { useMutation } from "@tanstack/react-query";
 import { Paperclip, Upload, X, FileText, Download } from "lucide-react";
 import { apiSend } from "@/lib/api";
 import type { TaskDetail } from "@/lib/queries";
+import { useT } from "@/lib/i18n";
 
 type Attachment = TaskDetail["attachments"][number];
 
@@ -26,6 +27,7 @@ export function Attachments({
   const inputRef = useRef<HTMLInputElement>(null);
   const [dragOver, setDragOver] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const t = useT();
 
   const upload = useMutation({
     mutationFn: async (files: FileList | File[]) => {
@@ -38,7 +40,7 @@ export function Attachments({
         });
         if (!res.ok) {
           const data = await res.json().catch(() => ({}));
-          throw new Error(data.error ?? "Upload failed");
+          throw new Error(data.error ?? t("attach.uploadFailed"));
         }
       }
     },
@@ -61,7 +63,7 @@ export function Attachments({
   return (
     <section className="mt-6">
       <h3 className="mb-2 flex items-center gap-1.5 text-[13px] font-semibold text-cu-text-secondary">
-        <Paperclip className="h-4 w-4" /> Attachments
+        <Paperclip className="h-4 w-4" /> {t("attach.title")}
         {attachments.length > 0 && <span className="text-cu-text-tertiary">{attachments.length}</span>}
       </h3>
 
@@ -92,7 +94,7 @@ export function Attachments({
         }`}
       >
         <Upload className="h-4 w-4" />
-        {upload.isPending ? "Uploading…" : "Drop files or click to upload"}
+        {upload.isPending ? t("profile.uploading") : t("attach.drop")}
         <input
           ref={inputRef}
           type="file"
@@ -111,6 +113,7 @@ export function Attachments({
 
 function AttachmentCard({ attachment, onDelete }: { attachment: Attachment; onDelete: () => void }) {
   const isImage = attachment.mime.startsWith("image/");
+  const t = useT();
   return (
     <div className="group relative flex items-center gap-2 overflow-hidden rounded-lg border border-cu-border bg-cu-panel p-2">
       {isImage ? (
@@ -138,14 +141,14 @@ function AttachmentCard({ attachment, onDelete }: { attachment: Attachment; onDe
           href={attachment.url}
           download={attachment.name}
           className="rounded p-1 text-cu-text-tertiary hover:bg-cu-hover hover:text-cu-text"
-          title="Download"
+          title={t("attach.download")}
         >
           <Download className="h-3.5 w-3.5" />
         </a>
         <button
           onClick={onDelete}
           className="rounded p-1 text-cu-text-tertiary hover:bg-cu-hover hover:text-cu-urgent"
-          title="Delete"
+          title={t("common.delete")}
         >
           <X className="h-3.5 w-3.5" />
         </button>

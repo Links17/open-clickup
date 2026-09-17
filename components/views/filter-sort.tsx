@@ -6,17 +6,21 @@ import { SlidersHorizontal, ArrowUpDown, Check, ArrowUp, ArrowDown, X, Layers } 
 import { cn } from "@/lib/utils";
 import type { ViewState, SortField, GroupBy } from "@/lib/view-state";
 import { countActiveFilters } from "@/lib/view-state";
-import { PRIORITY_ORDER, PRIORITY_CONFIG } from "@/lib/constants";
+import { PRIORITY_ORDER } from "@/lib/constants";
 import { PriorityFlag } from "@/components/ui/primitives";
 import { Avatar } from "@/components/ui/avatar";
 import { useWorkspace } from "@/components/workspace-context";
 import type { TaskWithRelations } from "@/lib/queries";
+import { useT } from "@/lib/i18n";
 
-const SORT_LABELS: Record<Exclude<SortField, null>, string> = {
-  priority: "Priority",
-  dueDate: "Due date",
-  name: "Name",
-  created: "Date created",
+const SORT_KEYS = ["priority", "startDate", "dueDate", "timeEstimate", "name", "created"] as const;
+const SORT_I18N: Record<(typeof SORT_KEYS)[number], string> = {
+  priority: "filter.priority",
+  startDate: "filter.startDate",
+  dueDate: "filter.dueDate",
+  timeEstimate: "filter.estimate",
+  name: "filter.name",
+  created: "filter.created",
 };
 
 export function FilterMenu({
@@ -29,6 +33,7 @@ export function FilterMenu({
   tasks: TaskWithRelations[];
 }) {
   const { workspace } = useWorkspace();
+  const t = useT();
   const members = workspace.members.map((m) => m.user);
   const count = countActiveFilters(state);
 
@@ -52,7 +57,7 @@ export function FilterMenu({
           )}
         >
           <SlidersHorizontal className="h-4 w-4" />
-          <span className="hidden sm:inline">Filter</span>
+          <span className="hidden sm:inline">{t("filter.filter")}</span>
           {count > 0 && (
             <span className="rounded-full bg-cu-purple px-1.5 text-[10px] font-semibold text-white">{count}</span>
           )}
@@ -65,13 +70,13 @@ export function FilterMenu({
           className="z-50 max-h-[420px] w-[260px] overflow-y-auto rounded-lg border border-cu-border bg-cu-panel p-2 shadow-lg"
         >
           <div className="mb-1 flex items-center justify-between">
-            <span className="text-[11px] font-semibold uppercase tracking-wide text-cu-text-tertiary">Priority</span>
+            <span className="text-[11px] font-semibold uppercase tracking-wide text-cu-text-tertiary">{t("filter.priority")}</span>
             {count > 0 && (
               <button
-                onClick={() => onChange({ ...state, filters: { priorities: [], assignees: [], tags: [] } })}
+                onClick={() => onChange({ ...state, filters: { priorities: [], assignees: [], tags: [], modules: [] } })}
                 className="flex items-center gap-0.5 text-[11px] text-cu-text-tertiary hover:text-cu-urgent"
               >
-                <X className="h-3 w-3" /> Clear
+                <X className="h-3 w-3" /> {t("common.clear")}
               </button>
             )}
           </div>
@@ -82,11 +87,11 @@ export function FilterMenu({
               onClick={() => onChange({ ...state, filters: { ...state.filters, priorities: toggle(state.filters.priorities, p) } })}
             >
               <PriorityFlag priority={p} />
-              {PRIORITY_CONFIG[p].label}
+              {t(`priority.${p}`)}
             </Row>
           ))}
 
-          <div className="mb-1 mt-3 text-[11px] font-semibold uppercase tracking-wide text-cu-text-tertiary">Assignee</div>
+          <div className="mb-1 mt-3 text-[11px] font-semibold uppercase tracking-wide text-cu-text-tertiary">{t("filter.assignee")}</div>
           {members.map((u) => (
             <Row
               key={u.id}
@@ -100,15 +105,35 @@ export function FilterMenu({
 
           {tags.length > 0 && (
             <>
-              <div className="mb-1 mt-3 text-[11px] font-semibold uppercase tracking-wide text-cu-text-tertiary">Tags</div>
-              {tags.map((t) => (
+              <div className="mb-1 mt-3 text-[11px] font-semibold uppercase tracking-wide text-cu-text-tertiary">{t("filter.tags")}</div>
+              {tags.map((tag) => (
                 <Row
-                  key={t.id}
-                  active={state.filters.tags.includes(t.id)}
-                  onClick={() => onChange({ ...state, filters: { ...state.filters, tags: toggle(state.filters.tags, t.id) } })}
+                  key={tag.id}
+                  active={state.filters.tags.includes(tag.id)}
+                  onClick={() => onChange({ ...state, filters: { ...state.filters, tags: toggle(state.filters.tags, tag.id) } })}
                 >
-                  <span className="h-3 w-3 rounded-full" style={{ backgroundColor: t.color }} />
-                  {t.name}
+                  <span className="h-3 w-3 rounded-full" style={{ backgroundColor: tag.color }} />
+                  {tag.name}
+                </Row>
+              ))}
+            </>
+          )}
+
+          {workspace.modules.length > 0 && (
+            <>
+              <div className="mb-1 mt-3 text-[11px] font-semibold uppercase tracking-wide text-cu-text-tertiary">{t("filter.module")}</div>
+              {workspace.modules.map((m) => (
+                <Row
+                  key={m.id}
+                  active={(state.filters.modules ?? []).includes(m.id)}
+                  onClick={() =>
+                    onChange({
+                      ...state,
+                      filters: { ...state.filters, modules: toggle(state.filters.modules ?? [], m.id) },
+                    })
+                  }
+                >
+                  {m.name}
                 </Row>
               ))}
             </>
@@ -139,11 +164,13 @@ function Row({
   );
 }
 
-const GROUP_LABELS: Record<GroupBy, string> = {
-  status: "Status",
-  assignee: "Assignee",
-  priority: "Priority",
-  none: "None",
+const GROUP_KEYS: GroupBy[] = ["status", "assignee", "priority", "module", "none"];
+const GROUP_I18N: Record<GroupBy, string> = {
+  status: "filter.status",
+  assignee: "filter.assignee",
+  priority: "filter.priority",
+  module: "filter.module",
+  none: "filter.none",
 };
 
 export function GroupMenu({
@@ -153,6 +180,7 @@ export function GroupMenu({
   state: ViewState;
   onChange: (s: ViewState) => void;
 }) {
+  const t = useT();
   const active = state.groupBy !== "status";
   return (
     <DropdownMenu.Root>
@@ -164,7 +192,7 @@ export function GroupMenu({
           )}
         >
           <Layers className="h-4 w-4" />
-          <span className="hidden sm:inline">Group: {GROUP_LABELS[state.groupBy]}</span>
+          <span className="hidden sm:inline">{t("filter.group", { by: t(GROUP_I18N[state.groupBy]) })}</span>
         </button>
       </DropdownMenu.Trigger>
       <DropdownMenu.Portal>
@@ -173,14 +201,14 @@ export function GroupMenu({
           align="end"
           className="z-50 min-w-[180px] rounded-lg border border-cu-border bg-cu-panel p-1 shadow-lg"
         >
-          <div className="px-2 py-1.5 text-[11px] font-semibold uppercase tracking-wide text-cu-text-tertiary">Group by</div>
-          {(Object.keys(GROUP_LABELS) as GroupBy[]).map((g) => (
+          <div className="px-2 py-1.5 text-[11px] font-semibold uppercase tracking-wide text-cu-text-tertiary">{t("filter.groupBy")}</div>
+          {GROUP_KEYS.map((g) => (
             <DropdownMenu.Item
               key={g}
               onSelect={(e) => { e.preventDefault(); onChange({ ...state, groupBy: g }); }}
               className="flex cursor-pointer items-center gap-2 rounded px-2 py-1.5 text-[13px] outline-none hover:bg-cu-hover"
             >
-              {GROUP_LABELS[g]}
+              {t(GROUP_I18N[g])}
               {state.groupBy === g && <Check className="ml-auto h-3.5 w-3.5 text-cu-purple" />}
             </DropdownMenu.Item>
           ))}
@@ -197,6 +225,7 @@ export function SortMenu({
   state: ViewState;
   onChange: (s: ViewState) => void;
 }) {
+  const t = useT();
   const active = state.sort.field;
   return (
     <DropdownMenu.Root>
@@ -208,7 +237,7 @@ export function SortMenu({
           )}
         >
           <ArrowUpDown className="h-4 w-4" />
-          <span className="hidden sm:inline">{active ? SORT_LABELS[active] : "Sort"}</span>
+          <span className="hidden sm:inline">{active ? t(SORT_I18N[active]) : t("filter.sort")}</span>
         </button>
       </DropdownMenu.Trigger>
       <DropdownMenu.Portal>
@@ -217,7 +246,7 @@ export function SortMenu({
           align="end"
           className="z-50 min-w-[200px] rounded-lg border border-cu-border bg-cu-panel p-1 shadow-lg"
         >
-          {(Object.keys(SORT_LABELS) as Exclude<SortField, null>[]).map((f) => (
+          {SORT_KEYS.map((f) => (
             <DropdownMenu.Item
               key={f}
               onSelect={(e) => {
@@ -226,7 +255,7 @@ export function SortMenu({
               }}
               className="flex cursor-pointer items-center gap-2 rounded px-2 py-1.5 text-[13px] outline-none hover:bg-cu-hover"
             >
-              {SORT_LABELS[f]}
+              {t(SORT_I18N[f])}
               {active === f && <Check className="ml-auto h-3.5 w-3.5 text-cu-purple" />}
             </DropdownMenu.Item>
           ))}
@@ -239,7 +268,7 @@ export function SortMenu({
             className="flex cursor-pointer items-center gap-2 rounded px-2 py-1.5 text-[13px] outline-none hover:bg-cu-hover"
           >
             {state.sort.dir === "asc" ? <ArrowUp className="h-3.5 w-3.5" /> : <ArrowDown className="h-3.5 w-3.5" />}
-            {state.sort.dir === "asc" ? "Ascending" : "Descending"}
+            {state.sort.dir === "asc" ? t("filter.ascending") : t("filter.descending")}
           </DropdownMenu.Item>
           {active && (
             <DropdownMenu.Item
@@ -249,7 +278,7 @@ export function SortMenu({
               }}
               className="flex cursor-pointer items-center gap-2 rounded px-2 py-1.5 text-[13px] text-cu-text-secondary outline-none hover:bg-cu-hover"
             >
-              <X className="h-3.5 w-3.5" /> Clear sort
+              <X className="h-3.5 w-3.5" /> {t("filter.clearSort")}
             </DropdownMenu.Item>
           )}
         </DropdownMenu.Content>

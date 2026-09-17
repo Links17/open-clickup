@@ -3,16 +3,21 @@
 import { useMemo, useState } from "react";
 import { ChevronRight, ChevronDown, Plus } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { displayLabel, groupLabel, useT } from "@/lib/i18n";
 import type { ListData, TaskWithRelations, StatusModel, CustomFieldWithOptions } from "@/lib/queries";
-import { useUpdateTask, useCreateTask, useBulk } from "@/lib/hooks";
+import { useUpdateTask, useCreateTask, useBulk, useLogTime } from "@/lib/hooks";
+import { byUserTitle, displayLoggedTotal } from "@/lib/time";
 import { useWorkspace } from "@/components/workspace-context";
 import { groupTasks, type TaskGroup } from "@/lib/grouping";
 import type { GroupBy } from "@/lib/view-state";
 import { StatusControl } from "@/components/menus/status-control";
 import { PriorityControl } from "@/components/menus/priority-control";
 import { AssigneeControl } from "@/components/menus/assignee-control";
-import { DueDate } from "@/components/ui/primitives";
+import { DateControl } from "@/components/menus/date-control";
+import { EstimateControl } from "@/components/menus/estimate-control";
+import { LoggedTimeControl } from "@/components/menus/logged-time-control";
 import { CustomFieldCell } from "@/components/views/custom-field-cell";
+import { AddFieldDialog } from "@/components/views/add-field-dialog";
 import { BulkBar } from "@/components/views/bulk-bar";
 
 const PAGE_SIZE = 50;
@@ -33,6 +38,9 @@ export function TableView({
   const members = useMemo(() => workspace.members.map((m) => m.user), [workspace.members]);
   const update = useUpdateTask(list.id);
   const bulk = useBulk(list.id);
+  const t = useT();
+  const [addingField, setAddingField] = useState(false);
+  const [editingField, setEditingField] = useState<CustomFieldWithOptions | null>(null);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const toggleSelect = (id: string) =>
     setSelected((prev) => {
@@ -48,8 +56,8 @@ export function TableView({
     [tasks, groupBy, statuses, members],
   );
 
-  // grid template: name | status | assignee | priority | due | start | custom fields...
-  const cols = `minmax(260px,2fr) 150px 130px 100px 120px 120px ${customFields.map(() => "130px").join(" ")} 40px`;
+  // grid template: name | status | assignee | priority | estimate | logged | start | due | custom fields...
+  const cols = `minmax(260px,2fr) 150px 130px 100px 90px 80px 120px 120px ${customFields.map(() => "130px").join(" ")} 40px`;
 
   return (
     <div className="flex-1 overflow-auto">
@@ -59,17 +67,35 @@ export function TableView({
           className="sticky top-0 z-10 grid items-center border-b border-cu-border bg-cu-bg text-[11px] font-semibold uppercase tracking-wide text-cu-text-tertiary"
           style={{ gridTemplateColumns: cols }}
         >
-          <Cell className="pl-9 font-semibold">Name</Cell>
-          <Cell>Status</Cell>
-          <Cell>Assignee</Cell>
-          <Cell>Priority</Cell>
-          <Cell>Due date</Cell>
-          <Cell>Start date</Cell>
+          <Cell className="pl-9 font-semibold">{t("col.name")}</Cell>
+          <Cell>{t("col.status")}</Cell>
+          <Cell>{t("col.assignee")}</Cell>
+          <Cell>{t("col.priority")}</Cell>
+          <Cell>{t("col.estimate")}</Cell>
+          <Cell>{t("col.logged")}</Cell>
+          <Cell>{t("col.startDate")}</Cell>
+          <Cell>{t("col.dueDate")}</Cell>
           {customFields.map((f) => (
-            <Cell key={f.id}>{f.name}</Cell>
+            <Cell key={f.id}>
+              <button
+                type="button"
+                title={t("field.editField")}
+                onClick={() => setEditingField(f)}
+                className="truncate rounded px-1 text-left hover:bg-cu-hover hover:text-cu-text"
+              >
+                {displayLabel(t, f.name)}
+              </button>
+            </Cell>
           ))}
           <Cell className="justify-center">
-            <Plus className="h-3.5 w-3.5" />
+            <button
+              type="button"
+              title={t("list.addColumn")}
+              onClick={() => setAddingField(true)}
+              className="rounded p-1 text-cu-text-tertiary hover:bg-cu-hover hover:text-cu-text"
+            >
+              <Plus className="h-3.5 w-3.5" />
+            </button>
           </Cell>
         </div>
 
@@ -91,6 +117,10 @@ export function TableView({
         ))}
       </div>
 
+      {addingField && <AddFieldDialog listId={list.id} onClose={() => setAddingField(false)} />}
+      {editingField && (
+        <AddFieldDialog listId={list.id} field={editingField} onClose={() => setEditingField(null)} />
+      )}
       {selected.size > 0 && (
         <BulkBar
           count={selected.size}
@@ -137,6 +167,13 @@ function TableGroup({
   const [collapsed, setCollapsed] = useState(false);
   const [visible, setVisible] = useState(PAGE_SIZE);
   const create = useCreateTask(listId);
+  const logTime = useLogTime(listId);
+  const t = useT();
+  const { currentUser, workspace } = useWorkspace();
+  const memberNames = useMemo(
+    () => Object.fromEntries(workspace.members.map((m) => [m.user.id, m.user.name])),
+    [workspace.members],
+  );
   const shown = tasks.slice(0, visible);
   const hidden = tasks.length - shown.length;
 
@@ -150,7 +187,7 @@ function TableGroup({
           className="inline-flex items-center rounded px-2 py-0.5 text-[11px] font-bold uppercase tracking-wide"
           style={{ color: group.color, backgroundColor: `${group.color}1f` }}
         >
-          {group.label}
+          {groupLabel(t, group)}
         </span>
         <span className="text-xs font-medium text-cu-text-tertiary">{tasks.length}</span>
       </div>
@@ -194,11 +231,37 @@ function TableGroup({
               <Cell onClick={(e) => e.stopPropagation()}>
                 <PriorityControl value={task.priority} onChange={(p) => onUpdate(task.id, { priority: p })} />
               </Cell>
-              <Cell className="text-[13px] text-cu-text-secondary">
-                {task.dueDate ? <DueDate date={task.dueDate} done={task.status.type === "DONE"} /> : <span className="text-cu-text-tertiary">—</span>}
+              <Cell className="text-[13px] text-cu-text-secondary" onClick={(e) => e.stopPropagation()}>
+                <EstimateControl
+                  minutes={task.timeEstimate}
+                  onChange={(minutes) => onUpdate(task.id, { timeEstimate: minutes })}
+                  compact
+                />
               </Cell>
-              <Cell className="text-[13px] text-cu-text-secondary">
-                {task.startDate ? <DueDate date={task.startDate} /> : <span className="text-cu-text-tertiary">—</span>}
+              <Cell className="text-[13px] text-cu-text-secondary" onClick={(e) => e.stopPropagation()}>
+                <LoggedTimeControl
+                  totalSeconds={displayLoggedTotal(task)}
+                  entries={task.timeEntries ?? []}
+                  currentUserId={currentUser.id}
+                  byUserLabel={byUserTitle(task.loggedByUser, memberNames)}
+                  onSet={(durationSeconds, workDate) => logTime.mutate({ taskId: task.id, durationSeconds, workDate })}
+                  compact
+                />
+              </Cell>
+              <Cell className="text-[13px] text-cu-text-secondary" onClick={(e) => e.stopPropagation()}>
+                <DateControl
+                  value={task.startDate}
+                  onChange={(d) => onUpdate(task.id, { startDate: d ? d.toISOString() : null })}
+                  placeholder=""
+                />
+              </Cell>
+              <Cell className="text-[13px] text-cu-text-secondary" onClick={(e) => e.stopPropagation()}>
+                <DateControl
+                  value={task.dueDate}
+                  done={task.status.type === "DONE"}
+                  onChange={(d) => onUpdate(task.id, { dueDate: d ? d.toISOString() : null })}
+                  placeholder=""
+                />
               </Cell>
               {customFields.map((f) => (
                 <Cell key={f.id} onClick={(e) => e.stopPropagation()}>
@@ -214,14 +277,14 @@ function TableGroup({
               onClick={() => setVisible((v) => v + PAGE_SIZE)}
               className="flex w-full items-center gap-1.5 border-b border-cu-border/60 px-3 py-1.5 pl-9 text-[13px] font-medium text-cu-purple hover:bg-cu-hover/40"
             >
-              Show {Math.min(hidden, PAGE_SIZE)} more ({hidden} hidden)
+              {t("list.showMore", { n: Math.min(hidden, PAGE_SIZE), hidden })}
             </button>
           )}
           <button
             onClick={() =>
               create.mutate({
                 listId,
-                name: "New task",
+                name: t("list.newTask"),
                 statusId: group.statusId ?? firstStatusId,
                 priority: group.defaults?.priority,
                 assigneeIds: group.defaults?.assigneeIds,
@@ -229,7 +292,7 @@ function TableGroup({
             }
             className="flex w-full items-center gap-1.5 border-b border-cu-border/60 px-3 py-1.5 pl-9 text-[13px] text-cu-text-tertiary hover:bg-cu-hover/40"
           >
-            <Plus className="h-3.5 w-3.5" /> Add Task
+            <Plus className="h-3.5 w-3.5" /> {t("list.addTask")}
           </button>
         </>
       )}

@@ -5,6 +5,7 @@ import * as Popover from "@radix-ui/react-popover";
 import { Check, Plus, Tag as TagIcon } from "lucide-react";
 import { useTags, useCreateTag } from "@/lib/hooks";
 import { TagChip } from "@/components/ui/primitives";
+import { useT } from "@/lib/i18n";
 
 export function TagControl({
   spaceId,
@@ -18,6 +19,7 @@ export function TagControl({
   const { data: tags = [] } = useTags(spaceId);
   const createTag = useCreateTag(spaceId);
   const [query, setQuery] = useState("");
+  const t = useT();
 
   const selectedIds = new Set(selected.map((s) => s.tagId));
   const filtered = tags.filter((t) => t.name.toLowerCase().includes(query.toLowerCase()));
@@ -46,7 +48,7 @@ export function TagControl({
             selected.map((s) => <TagChip key={s.tagId} name={s.tag.name} color={s.tag.color} />)
           ) : (
             <span className="flex items-center gap-1 text-[13px] text-cu-text-tertiary hover:text-cu-text-secondary">
-              <Plus className="h-3.5 w-3.5" /> Add tag
+              <Plus className="h-3.5 w-3.5" /> {t("tag.add")}
             </span>
           )}
         </button>
@@ -67,7 +69,7 @@ export function TagControl({
               onKeyDown={(e) => {
                 if (e.key === "Enter" && query.trim() && !exactMatch) create();
               }}
-              placeholder="Search or create…"
+              placeholder={t("tag.searchOrCreate")}
               className="flex-1 bg-transparent text-[13px] outline-none placeholder:text-cu-text-tertiary"
             />
           </div>
@@ -88,11 +90,11 @@ export function TagControl({
                 onClick={create}
                 className="flex w-full items-center gap-2 rounded px-2 py-1.5 text-left text-[13px] text-cu-purple hover:bg-cu-hover"
               >
-                <Plus className="h-3.5 w-3.5" /> Create &ldquo;{query.trim()}&rdquo;
+                <Plus className="h-3.5 w-3.5" /> {t("tag.createNamed", { name: query.trim() })}
               </button>
             )}
             {!filtered.length && !query.trim() && (
-              <div className="px-2 py-2 text-[12px] text-cu-text-tertiary">No tags yet.</div>
+              <div className="px-2 py-2 text-[12px] text-cu-text-tertiary">{t("tag.none")}</div>
             )}
           </div>
         </Popover.Content>

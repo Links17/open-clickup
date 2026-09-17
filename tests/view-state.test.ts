@@ -9,17 +9,19 @@ function mkTask(p: Partial<TaskWithRelations> & { id: string }): TaskWithRelatio
     statusId: p.statusId ?? "s1",
     priority: p.priority ?? null,
     position: p.position ?? 0,
+    startDate: p.startDate ?? null,
     dueDate: p.dueDate ?? null,
     createdAt: p.createdAt ?? new Date("2026-01-01"),
     assignees: p.assignees ?? [],
     tags: p.tags ?? [],
+    moduleId: p.moduleId ?? null,
   } as unknown as TaskWithRelations;
 }
 
 const tasks = [
-  mkTask({ id: "a", name: "Banana", priority: "LOW", assignees: [{ userId: "u1" }] as never }),
-  mkTask({ id: "b", name: "Apple", priority: "URGENT", assignees: [{ userId: "u2" }] as never, tags: [{ tagId: "t1" }] as never }),
-  mkTask({ id: "c", name: "Cherry", priority: "URGENT", assignees: [{ userId: "u1" }] as never }),
+  mkTask({ id: "a", name: "Banana", priority: "LOW", assignees: [{ userId: "u1" }] as never, startDate: new Date("2026-03-01"), moduleId: "m1" }),
+  mkTask({ id: "b", name: "Apple", priority: "URGENT", assignees: [{ userId: "u2" }] as never, tags: [{ tagId: "t1" }] as never, startDate: new Date("2026-01-01"), moduleId: "m2" }),
+  mkTask({ id: "c", name: "Cherry", priority: "URGENT", assignees: [{ userId: "u1" }] as never, startDate: new Date("2026-02-01") }),
 ];
 
 function vs(over: Partial<ViewState>): ViewState {
@@ -28,16 +30,20 @@ function vs(over: Partial<ViewState>): ViewState {
 
 describe("applyViewState — filtering", () => {
   it("filters by priority", () => {
-    const out = applyViewState(tasks, vs({ filters: { priorities: ["URGENT"], assignees: [], tags: [] } }));
+    const out = applyViewState(tasks, vs({ filters: { priorities: ["URGENT"], assignees: [], tags: [], modules: [] } }));
     expect(out.map((t) => t.id).sort()).toEqual(["b", "c"]);
   });
   it("filters by assignee", () => {
-    const out = applyViewState(tasks, vs({ filters: { priorities: [], assignees: ["u2"], tags: [] } }));
+    const out = applyViewState(tasks, vs({ filters: { priorities: [], assignees: ["u2"], tags: [], modules: [] } }));
     expect(out.map((t) => t.id)).toEqual(["b"]);
   });
   it("filters by tag", () => {
-    const out = applyViewState(tasks, vs({ filters: { priorities: [], assignees: [], tags: ["t1"] } }));
+    const out = applyViewState(tasks, vs({ filters: { priorities: [], assignees: [], tags: ["t1"], modules: [] } }));
     expect(out.map((t) => t.id)).toEqual(["b"]);
+  });
+  it("filters by module", () => {
+    const out = applyViewState(tasks, vs({ filters: { priorities: [], assignees: [], tags: [], modules: ["m1"] } }));
+    expect(out.map((t) => t.id)).toEqual(["a"]);
   });
   it("returns all with no filters", () => {
     expect(applyViewState(tasks, EMPTY_VIEW_STATE)).toHaveLength(3);
@@ -57,5 +63,9 @@ describe("applyViewState — sorting", () => {
     const out = applyViewState(tasks, vs({ sort: { field: "priority", dir: "asc" } }));
     expect(out[0].priority).toBe("URGENT");
     expect(out[out.length - 1].priority).toBe("LOW");
+  });
+  it("sorts by start date ascending", () => {
+    const out = applyViewState(tasks, vs({ sort: { field: "startDate", dir: "asc" } }));
+    expect(out.map((t) => t.id)).toEqual(["b", "c", "a"]);
   });
 });

@@ -58,6 +58,28 @@ export function groupTasks(
       return groups;
     }
 
+    case "module": {
+      const byModule = new Map<string, { label: string; tasks: TaskWithRelations[] }>();
+      const none: TaskWithRelations[] = [];
+      for (const t of tasks) {
+        if (!t.moduleId || !t.module) {
+          none.push(t);
+          continue;
+        }
+        const bucket = byModule.get(t.moduleId) ?? { label: t.module.name, tasks: [] };
+        bucket.tasks.push(t);
+        byModule.set(t.moduleId, bucket);
+      }
+      const groups: TaskGroup[] = [...byModule.entries()].map(([id, b]) => ({
+        id,
+        label: b.label,
+        color: "#7b68ee",
+        tasks: b.tasks,
+      }));
+      if (none.length) groups.push({ id: "none", label: "No module", color: "#b5bcc9", tasks: none });
+      return groups;
+    }
+
     case "status":
     default:
       return ctx.statuses.map((s) => ({

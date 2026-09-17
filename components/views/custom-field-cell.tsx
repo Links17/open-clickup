@@ -4,6 +4,7 @@ import { Star } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { CustomFieldWithOptions } from "@/lib/queries";
 import { CustomFieldType } from "@/lib/enums";
+import { displayLabel, useT } from "@/lib/i18n";
 
 type CFValue = { customFieldId: string; value: unknown };
 
@@ -18,6 +19,7 @@ export function CustomFieldCell({
 }) {
   const entry = values.find((v) => v.customFieldId === field.id);
   const value = entry?.value;
+  const t = useT();
 
   if (value == null || value === "") {
     return <span className="text-cu-text-tertiary">{compact ? "" : "—"}</span>;
@@ -41,7 +43,7 @@ export function CustomFieldCell({
           className="inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-medium"
           style={{ color: opt.color, backgroundColor: `${opt.color}22` }}
         >
-          {opt.label}
+          {displayLabel(t, opt.label)}
         </span>
       );
     }
@@ -59,7 +61,7 @@ export function CustomFieldCell({
                 className="inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-medium"
                 style={{ color: opt.color, backgroundColor: `${opt.color}22` }}
               >
-                {opt.label}
+                {displayLabel(t, opt.label)}
               </span>
             );
           })}

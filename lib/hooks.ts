@@ -8,8 +8,12 @@ import {
 } from "@tanstack/react-query";
 import { useEffect } from "react";
 import { apiGet, apiSend } from "@/lib/api";
+import { useToast } from "@/components/ui/toast";
+import { useT } from "@/lib/i18n";
 import type { ListData, TaskWithRelations, UserLite, WorkspaceTree } from "@/lib/queries";
+import { formatWorkDate, ownDaySeconds, todayWorkDate, type TimeEntryLite } from "@/lib/time";
 import type { TaskPatch } from "@/lib/tasks";
+import type { ModuleStat } from "@/lib/modules";
 
 export type Bootstrap = { currentUser: UserLite; workspace: WorkspaceTree; favorites: string[] };
 
@@ -37,8 +41,12 @@ export function useRealtime() {
           qc.invalidateQueries({ queryKey: ["list", event.listId] });
           qc.invalidateQueries({ queryKey: ["task"] });
           qc.invalidateQueries({ queryKey: ["my-tasks"] });
+          qc.invalidateQueries({ queryKey: ["module-stats"] });
+          qc.invalidateQueries({ queryKey: ["module-tasks"] });
+          qc.invalidateQueries({ queryKey: ["timesheet"] });
         } else if (event.type === "bootstrap") {
           qc.invalidateQueries({ queryKey: ["bootstrap"] });
+          qc.invalidateQueries({ queryKey: ["module-stats"] });
         }
         qc.invalidateQueries({ queryKey: ["notifications"] });
       } catch {
@@ -84,6 +92,10 @@ export type MyTask = {
   dueDate: string | null;
   status: { name: string; color: string; type: string };
   list: { name: string; space: { name: string; color: string } };
+  module: { id: string; name: string; status: { color: string } } | null;
+  timeEntries: TimeEntryLite[];
+  loggedTotal?: number;
+  loggedByUser?: { userId: string; seconds: number }[];
 };
 
 export function useMyTasks() {
@@ -91,6 +103,13 @@ export function useMyTasks() {
     queryKey: ["my-tasks"],
     queryFn: () => apiGet<{ tasks: MyTask[] }>("/api/me/tasks"),
     placeholderData: keepPreviousData,
+  });
+}
+
+export function useModuleStats() {
+  return useQuery({
+    queryKey: ["module-stats"],
+    queryFn: () => apiGet<{ stats: Record<string, ModuleStat> }>("/api/modules/stats"),
   });
 }
 
@@ -164,6 +183,8 @@ type ListLite = { id: string; name: string; spaceId: string };
 
 export function useHierarchy() {
   const qc = useQueryClient();
+  const toast = useToast();
+  const t = useT();
   const refresh = () => qc.invalidateQueries({ queryKey: ["bootstrap"] });
 
   const createSpace = useMutation({
@@ -186,9 +207,13 @@ export function useHierarchy() {
     onSuccess: refresh,
   });
   const remove = useMutation({
-    mutationFn: (v: { kind: "spaces" | "folders" | "lists"; id: string }) =>
+    mutationFn: (v: { kind: "spaces" | "folders" | "lists"; id: string; name: string }) =>
       apiSend(`/api/${v.kind}/${v.id}`, "DELETE"),
-    onSuccess: refresh,
+    onSuccess: (_d, v) => {
+      refresh();
+      toast.success(t("toast.deleted", { name: v.name }));
+    },
+    onError: () => toast.error(t("toast.deleteFailed")),
   });
 
   return { createSpace, createFolder, createList, rename, remove };
@@ -241,6 +266,144 @@ export function useUpdateTask(listId: string | undefined) {
     },
     onSettled: () => {
       if (listId) qc.invalidateQueries({ queryKey: ["list", listId] });
+      qc.invalidateQueries({ queryKey: ["my-tasks"] });
+    },
+  });
+}
+
+function upsertOwnDayEntry(
+  entries: TimeEntryLite[] | undefined,
+  userId: string,
+  workDate: string,
+  durationSeconds: number,
+): TimeEntryLite[] {
+  const rest = (entries ?? []).filter((e) => {
+    const day = e.workDate ? formatWorkDate(e.workDate) : formatWorkDate(e.startedAt);
+    return !(e.userId === userId && day === workDate);
+  });
+  if (durationSeconds <= 0) return rest;
+  const stamp = new Date();
+  return [
+    ...rest,
+    { duration: durationSeconds, startedAt: stamp, endedAt: stamp, userId, workDate },
+  ];
+}
+
+function applyDayLog<T extends { id: string; timeEntries?: TimeEntryLite[]; loggedTotal?: number; subtasks?: { id: string; timeEntries?: TimeEntryLite[]; loggedTotal?: number }[] }>(
+  task: T,
+  taskId: string,
+  userId: string,
+  workDate: string,
+  durationSeconds: number,
+): T {
+  if (task.id === taskId) {
+    const prev = ownDaySeconds(task.timeEntries ?? [], userId, workDate);
+    const delta = durationSeconds - prev;
+    return {
+      ...task,
+      timeEntries: upsertOwnDayEntry(task.timeEntries, userId, workDate, durationSeconds),
+      loggedTotal: Math.max(0, (task.loggedTotal ?? 0) + delta),
+    };
+  }
+  if (!task.subtasks) return task;
+  const idx = task.subtasks.findIndex((s) => s.id === taskId);
+  if (idx < 0) return task;
+  const sub = task.subtasks[idx];
+  const prev = ownDaySeconds(sub.timeEntries ?? [], userId, workDate);
+  const delta = durationSeconds - prev;
+  const nextSubs = task.subtasks.slice();
+  nextSubs[idx] = {
+    ...sub,
+    timeEntries: upsertOwnDayEntry(sub.timeEntries, userId, workDate, durationSeconds),
+    loggedTotal: Math.max(0, (sub.loggedTotal ?? 0) + delta),
+  };
+  return {
+    ...task,
+    subtasks: nextSubs,
+    loggedTotal: Math.max(0, (task.loggedTotal ?? 0) + delta),
+  };
+}
+
+export function useLogTime(listId?: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({
+      taskId,
+      durationSeconds,
+      workDate,
+    }: {
+      taskId: string;
+      durationSeconds: number;
+      workDate?: string;
+    }) =>
+      apiSend(`/api/tasks/${taskId}/time`, "POST", {
+        action: "log",
+        durationSeconds,
+        workDate: workDate ?? todayWorkDate(),
+      }),
+    onMutate: async ({ taskId, durationSeconds, workDate }) => {
+      const day = workDate ?? todayWorkDate();
+      const userId = qc.getQueryData<Bootstrap>(["bootstrap"])?.currentUser.id;
+      await qc.cancelQueries({ queryKey: ["my-tasks"] });
+      if (listId) await qc.cancelQueries({ queryKey: ["list", listId] });
+      const prevMine = qc.getQueryData<{ tasks: MyTask[] }>(["my-tasks"]);
+      const prevList = listId ? qc.getQueryData<ListData>(["list", listId]) : undefined;
+      if (userId && prevMine) {
+        qc.setQueryData<{ tasks: MyTask[] }>(["my-tasks"], {
+          tasks: prevMine.tasks.map((t) => applyDayLog(t, taskId, userId, day, durationSeconds)),
+        });
+      }
+      if (userId && prevList && listId) {
+        qc.setQueryData<ListData>(["list", listId], {
+          ...prevList,
+          tasks: prevList.tasks.map((t) => applyDayLog(t, taskId, userId, day, durationSeconds)),
+        });
+      }
+      return { prevMine, prevList };
+    },
+    onError: (_e, _v, ctx) => {
+      if (ctx?.prevMine) qc.setQueryData(["my-tasks"], ctx.prevMine);
+      if (ctx?.prevList && listId) qc.setQueryData(["list", listId], ctx.prevList);
+    },
+    onSettled: () => {
+      if (listId) qc.invalidateQueries({ queryKey: ["list", listId] });
+      qc.invalidateQueries({ queryKey: ["my-tasks"] });
+      qc.invalidateQueries({ queryKey: ["task"] });
+      qc.invalidateQueries({ queryKey: ["module-tasks"] });
+      qc.invalidateQueries({ queryKey: ["timesheet"] });
+    },
+  });
+}
+
+export type UserTimesheet = { capMinutes: number; days: { date: string; seconds: number }[] };
+export type WorkspaceTimesheet = {
+  capMinutes: number;
+  members: { userId: string; name: string; color: string; days: Record<string, number> }[];
+};
+
+export function useMyTimesheet(from: string, to: string) {
+  return useQuery({
+    queryKey: ["timesheet", "me", from, to],
+    queryFn: () => apiGet<UserTimesheet>(`/api/me/timesheet?from=${from}&to=${to}`),
+  });
+}
+
+export function useWorkspaceTimesheet(from: string, to: string, enabled: boolean) {
+  return useQuery({
+    queryKey: ["timesheet", "workspace", from, to],
+    queryFn: () => apiGet<WorkspaceTimesheet>(`/api/workspace/timesheet?from=${from}&to=${to}`),
+    enabled,
+  });
+}
+
+export function useUpdateDailyCap() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (hours: number) =>
+      apiSend("/api/workspace", "PATCH", { dailyHourCapMinutes: Math.round(hours * 60) }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["bootstrap"] });
+      qc.invalidateQueries({ queryKey: ["timesheet"] });
     },
   });
 }
@@ -275,12 +438,20 @@ export function useDuplicateTask(listId: string | undefined) {
 
 export function useBulk(listId: string | undefined) {
   const qc = useQueryClient();
+  const toast = useToast();
+  const t = useT();
   return useMutation({
     mutationFn: (input: {
       ids: string[];
       patch?: { statusId?: string; priority?: string | null; assigneeIds?: string[] };
       delete?: boolean;
     }) => apiSend("/api/tasks/bulk", "POST", input),
+    onSuccess: (_d, input) => {
+      if (input.delete) toast.success(t("toast.deletedCount", { count: input.ids.length }));
+    },
+    onError: (_e, input) => {
+      if (input.delete) toast.error(t("toast.deleteFailed"));
+    },
     onSettled: () => {
       if (listId) qc.invalidateQueries({ queryKey: ["list", listId] });
     },
@@ -300,6 +471,8 @@ export function useSetFieldValue(listId: string | undefined) {
 
 export function useDeleteTask(listId: string | undefined) {
   const qc = useQueryClient();
+  const toast = useToast();
+  const t = useT();
   return useMutation({
     mutationFn: (taskId: string) =>
       apiSend<{ ok: true }>(`/api/tasks/${taskId}`, "DELETE"),
@@ -307,21 +480,34 @@ export function useDeleteTask(listId: string | undefined) {
       if (!listId) return;
       await qc.cancelQueries({ queryKey: ["list", listId] });
       const prev = qc.getQueryData<ListData>(["list", listId]);
+      const name = prev ? taskNameFromList(prev, taskId) : undefined;
       if (prev) {
         qc.setQueryData<ListData>(["list", listId], {
           ...prev,
-          tasks: prev.tasks.filter((t) => t.id !== taskId),
+          tasks: prev.tasks.filter((row) => row.id !== taskId),
         });
       }
-      return { prev };
+      return { prev, name };
     },
     onError: (_e, _v, ctx) => {
       if (ctx?.prev && listId) qc.setQueryData(["list", listId], ctx.prev);
+      toast.error(t("toast.deleteFailed"));
+    },
+    onSuccess: (_d, _v, ctx) => {
+      toast.success(ctx?.name ? t("toast.deleted", { name: ctx.name }) : t("toast.deletedGeneric"));
     },
     onSettled: () => {
       if (listId) qc.invalidateQueries({ queryKey: ["list", listId] });
     },
   });
+}
+
+function taskNameFromList(data: ListData, taskId: string): string | undefined {
+  for (const row of data.tasks) {
+    if (row.id === taskId) return row.name;
+    const sub = row.subtasks?.find((s) => s.id === taskId);
+    if (sub) return sub.name;
+  }
 }
 
 function applyOptimistic(task: TaskWithRelations, patch: TaskPatch): TaskWithRelations {
@@ -334,5 +520,7 @@ function applyOptimistic(task: TaskWithRelations, patch: TaskPatch): TaskWithRel
     position: patch.position ?? task.position,
     startDate: patch.startDate !== undefined ? (patch.startDate ? new Date(patch.startDate) : null) : task.startDate,
     dueDate: patch.dueDate !== undefined ? (patch.dueDate ? new Date(patch.dueDate) : null) : task.dueDate,
+    timeEstimate: patch.timeEstimate !== undefined ? patch.timeEstimate : task.timeEstimate,
+    moduleId: patch.moduleId !== undefined ? patch.moduleId : task.moduleId,
   };
 }

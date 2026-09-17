@@ -10,7 +10,6 @@ import {
   Table2,
   Plus,
   Search,
-  Users,
   Ellipsis,
   Star,
   ClipboardList,
@@ -33,6 +32,8 @@ import { TableView } from "@/components/views/table-view";
 import { TaskModal } from "@/components/task/task-modal";
 import { StatusManager } from "@/components/status/status-manager";
 import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
+import { displayLabel, useT } from "@/lib/i18n";
+import { openTaskStack } from "@/lib/task-stack";
 
 const VIEW_ICON: Record<ViewType, React.ReactNode> = {
   LIST: <ListIcon className="h-4 w-4" />,
@@ -46,11 +47,12 @@ function vsFromConfig(config: unknown): ViewState {
   if (config && typeof config === "object") {
     const c = config as Partial<ViewState>;
     return {
-      filters: {
-        priorities: c.filters?.priorities ?? [],
-        assignees: c.filters?.assignees ?? [],
-        tags: c.filters?.tags ?? [],
-      },
+        filters: {
+          priorities: c.filters?.priorities ?? [],
+          assignees: c.filters?.assignees ?? [],
+          tags: c.filters?.tags ?? [],
+          modules: c.filters?.modules ?? [],
+        },
       sort: { field: c.sort?.field ?? null, dir: c.sort?.dir ?? "asc" },
       groupBy: c.groupBy ?? "status",
     };
@@ -61,6 +63,7 @@ function vsFromConfig(config: unknown): ViewState {
 export function ListPage({ listId }: { listId: string }) {
   const { data, isLoading, error } = useList(listId);
   const create = useCreateTask(listId);
+  const t = useT();
   const { favorites } = useWorkspace();
   const toggleFav = useToggleFavorite();
   const isFav = favorites.includes(listId);
@@ -69,7 +72,7 @@ export function ListPage({ listId }: { listId: string }) {
   const searchParams = useSearchParams();
   const taskParam = searchParams.get("task");
   const [activeViewId, setActiveViewId] = useState<string | null>(null);
-  const [openTaskId, setOpenTaskId] = useState<string | null>(null);
+  const [openStack, setOpenStack] = useState<string[]>([]);
   const [statusMgr, setStatusMgr] = useState(false);
   const [templatePicker, setTemplatePicker] = useState(false);
   const [vs, setVs] = useState<ViewState>(EMPTY_VIEW_STATE);
@@ -102,11 +105,15 @@ export function ListPage({ listId }: { listId: string }) {
 
   // open the task modal when navigated with ?task=ID (e.g. from command palette)
   useEffect(() => {
-    if (taskParam) setOpenTaskId(taskParam);
+    if (taskParam) setOpenStack(openTaskStack(taskParam));
   }, [taskParam]);
 
+  function openTask(id: string, parentId?: string) {
+    setOpenStack(openTaskStack(id, parentId));
+  }
+
   function closeTask() {
-    setOpenTaskId(null);
+    setOpenStack([]);
     if (taskParam) router.replace(pathname);
   }
 
@@ -119,10 +126,10 @@ export function ListPage({ listId }: { listId: string }) {
     if (!data) return;
     const task = await create.mutateAsync({
       listId,
-      name: "New task",
+      name: t("list.newTask"),
       statusId: data.list.statuses[0]?.id,
     });
-    setOpenTaskId(task.id);
+    setOpenStack(openTaskStack(task.id));
   }
 
   // global "c" keyboard shortcut → create a task in this list
@@ -137,7 +144,7 @@ export function ListPage({ listId }: { listId: string }) {
   if (error || !data)
     return (
       <div className="flex h-full items-center justify-center text-sm text-cu-text-secondary">
-        Couldn&apos;t load this list.
+        {t("list.loadFailed")}
       </div>
     );
 
@@ -162,7 +169,7 @@ export function ListPage({ listId }: { listId: string }) {
         <h1 className="text-lg font-semibold text-cu-text">{list.name}</h1>
         <button
           onClick={() => toggleFav.mutate(listId)}
-          aria-label={isFav ? "Remove from favorites" : "Add to favorites"}
+          aria-label={isFav ? t("list.removeFromFavorites") : t("list.addToFavorites")}
           className={cn("hover:text-[#ffcc00]", isFav ? "text-[#ffcc00]" : "text-cu-text-tertiary")}
         >
           <Star className={cn("h-4 w-4", isFav && "fill-current")} />
@@ -183,13 +190,13 @@ export function ListPage({ listId }: { listId: string }) {
                 onSelect={() => setStatusMgr(true)}
                 className="flex cursor-pointer items-center gap-2 rounded px-2 py-1.5 text-[13px] outline-none hover:bg-cu-hover"
               >
-                Edit statuses
+                {t("status.editStatuses")}
               </DropdownMenu.Item>
               <DropdownMenu.Item
                 onSelect={() => setTemplatePicker(true)}
                 className="flex cursor-pointer items-center gap-2 rounded px-2 py-1.5 text-[13px] outline-none hover:bg-cu-hover"
               >
-                New from template
+                {t("list.newFromTemplate")}
               </DropdownMenu.Item>
             </DropdownMenu.Content>
           </DropdownMenu.Portal>
@@ -211,27 +218,27 @@ export function ListPage({ listId }: { listId: string }) {
               )}
             >
               {VIEW_ICON[v.type]}
-              {v.name}
+              {displayLabel(t, v.name)}
             </button>
           ))}
-          <button className="flex items-center gap-1 px-2 py-2 text-[13px] text-cu-text-tertiary hover:text-cu-text">
-            <Plus className="h-4 w-4" /> View
-          </button>
         </div>
 
         <div className="flex items-center gap-1 text-cu-text-secondary">
-          <ToolbarButton icon={<Users className="h-4 w-4" />} label="Assignee" />
           <GroupMenu state={vs} onChange={updateVs} />
           <FilterMenu state={vs} onChange={updateVs} tasks={data.tasks} />
           <SortMenu state={vs} onChange={updateVs} />
-          <button className="rounded p-1.5 hover:bg-cu-hover">
+          <button
+            onClick={() => window.dispatchEvent(new Event("open-command-palette"))}
+            className="rounded p-1.5 hover:bg-cu-hover"
+            title={t("common.search")}
+          >
             <Search className="h-4 w-4" />
           </button>
           <button
             onClick={addTask}
             className="ml-1 flex items-center gap-1 rounded bg-cu-purple px-2.5 py-1.5 text-[13px] font-medium text-white hover:bg-cu-purple-dark"
           >
-            <Plus className="h-4 w-4" /> Add Task
+            <Plus className="h-4 w-4" /> {t("list.addTask")}
           </button>
         </div>
       </div>
@@ -241,36 +248,36 @@ export function ListPage({ listId }: { listId: string }) {
         data.tasks.length === 0 ? (
           <EmptyState
             icon={<ClipboardList className="h-6 w-6" />}
-            title="This list is empty"
-            subtitle="Create your first task to get started."
+            title={t("list.emptyTitle")}
+            subtitle={t("list.emptyHint")}
             action={
               <button
                 onClick={addTask}
                 className="flex items-center gap-1 rounded-md bg-cu-purple px-3 py-1.5 text-[13px] font-medium text-white hover:bg-cu-purple-dark"
               >
-                <Plus className="h-4 w-4" /> Add Task
+                <Plus className="h-4 w-4" /> {t("list.addTask")}
               </button>
             }
           />
         ) : (
           <EmptyState
             icon={<SearchX className="h-6 w-6" />}
-            title="No tasks match your filters"
-            subtitle="Try clearing or adjusting the active filters."
+            title={t("list.noMatchTitle")}
+            subtitle={t("list.noMatchHint")}
           />
         )
       ) : (
         <>
-          {activeView?.type === "LIST" && <ListView data={shownData!} onOpenTask={setOpenTaskId} groupBy={vs.groupBy} />}
-          {activeView?.type === "BOARD" && <BoardView data={shownData!} onOpenTask={setOpenTaskId} groupBy={vs.groupBy} />}
-          {activeView?.type === "CALENDAR" && <CalendarView data={shownData!} onOpenTask={setOpenTaskId} />}
-          {activeView?.type === "GANTT" && <GanttView data={shownData!} onOpenTask={setOpenTaskId} />}
-          {activeView?.type === "TABLE" && <TableView data={shownData!} onOpenTask={setOpenTaskId} groupBy={vs.groupBy} />}
+          {activeView?.type === "LIST" && <ListView data={shownData!} onOpenTask={openTask} groupBy={vs.groupBy} />}
+          {activeView?.type === "BOARD" && <BoardView data={shownData!} onOpenTask={openTask} groupBy={vs.groupBy} />}
+          {activeView?.type === "CALENDAR" && <CalendarView data={shownData!} onOpenTask={openTask} />}
+          {activeView?.type === "GANTT" && <GanttView data={shownData!} onOpenTask={openTask} />}
+          {activeView?.type === "TABLE" && <TableView data={shownData!} onOpenTask={openTask} groupBy={vs.groupBy} />}
         </>
       )}
 
-      {openTaskId && (
-        <TaskModal taskId={openTaskId} listId={listId} onClose={closeTask} onOpenTask={setOpenTaskId} />
+      {openStack.length > 0 && (
+        <TaskModal stack={openStack} listId={listId} onClose={closeTask} onStackChange={setOpenStack} />
       )}
       {statusMgr && (
         <StatusManager listId={listId} statuses={data.list.statuses} onClose={() => setStatusMgr(false)} />
@@ -279,19 +286,10 @@ export function ListPage({ listId }: { listId: string }) {
         <TemplatePicker
           listId={listId}
           onClose={() => setTemplatePicker(false)}
-          onCreated={(taskId) => setOpenTaskId(taskId)}
+          onCreated={(taskId) => setOpenStack(openTaskStack(taskId))}
         />
       )}
     </div>
-  );
-}
-
-function ToolbarButton({ icon, label }: { icon: React.ReactNode; label: string }) {
-  return (
-    <button className="flex items-center gap-1.5 rounded px-2 py-1.5 text-[13px] hover:bg-cu-hover">
-      {icon}
-      <span className="hidden sm:inline">{label}</span>
-    </button>
   );
 }
 

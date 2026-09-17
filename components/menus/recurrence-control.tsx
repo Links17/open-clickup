@@ -2,7 +2,8 @@
 
 import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
 import { Check, Repeat } from "lucide-react";
-import { RECURRENCE_OPTIONS, recurrenceLabel } from "@/lib/recurrence";
+import { RECURRENCE_OPTIONS } from "@/lib/recurrence";
+import { useT } from "@/lib/i18n";
 
 export function RecurrenceControl({
   value,
@@ -12,6 +13,7 @@ export function RecurrenceControl({
   onChange: (value: string | null) => void;
 }) {
   const active = value ?? "";
+  const t = useT();
   return (
     <DropdownMenu.Root>
       <DropdownMenu.Trigger asChild>
@@ -21,7 +23,7 @@ export function RecurrenceControl({
           }`}
         >
           <Repeat className="h-3.5 w-3.5" />
-          {recurrenceLabel(value)}
+          {t(`recurrence.${value || "none"}`)}
         </button>
       </DropdownMenu.Trigger>
       <DropdownMenu.Portal>
@@ -36,7 +38,7 @@ export function RecurrenceControl({
               onSelect={() => onChange(o.value || null)}
               className="flex cursor-pointer items-center gap-2 rounded px-2 py-1.5 text-[13px] outline-none hover:bg-cu-hover focus:bg-cu-hover"
             >
-              <span className="flex-1">{o.label}</span>
+              <span className="flex-1">{t(`recurrence.${o.value || "none"}`)}</span>
               {active === o.value && <Check className="h-4 w-4 text-cu-purple" />}
             </DropdownMenu.Item>
           ))}

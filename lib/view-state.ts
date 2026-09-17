@@ -2,21 +2,22 @@ import type { TaskWithRelations } from "@/lib/queries";
 import type { Priority } from "@/lib/enums";
 import { PRIORITY_CONFIG } from "@/lib/constants";
 
-export type SortField = "priority" | "dueDate" | "name" | "created" | null;
-export type GroupBy = "status" | "assignee" | "priority" | "none";
+export type SortField = "priority" | "dueDate" | "startDate" | "timeEstimate" | "name" | "created" | null;
+export type GroupBy = "status" | "assignee" | "priority" | "module" | "none";
 
 export type ViewState = {
   filters: {
     priorities: Priority[];
     assignees: string[];
     tags: string[];
+    modules: string[];
   };
   sort: { field: SortField; dir: "asc" | "desc" };
   groupBy: GroupBy;
 };
 
 export const EMPTY_VIEW_STATE: ViewState = {
-  filters: { priorities: [], assignees: [], tags: [] },
+  filters: { priorities: [], assignees: [], tags: [], modules: [] },
   sort: { field: null, dir: "asc" },
   groupBy: "status",
 };
@@ -25,7 +26,8 @@ export function countActiveFilters(vs: ViewState): number {
   return (
     vs.filters.priorities.length +
     vs.filters.assignees.length +
-    vs.filters.tags.length
+    vs.filters.tags.length +
+    (vs.filters.modules?.length ?? 0)
   );
 }
 
@@ -34,7 +36,7 @@ export function applyViewState(
   vs: ViewState,
 ): TaskWithRelations[] {
   let out = tasks;
-  const { priorities, assignees, tags } = vs.filters;
+  const { priorities, assignees, tags, modules } = vs.filters;
 
   if (priorities.length) {
     const set = new Set(priorities);
@@ -47,6 +49,10 @@ export function applyViewState(
   if (tags.length) {
     const set = new Set(tags);
     out = out.filter((t) => t.tags.some((tg) => set.has(tg.tagId)));
+  }
+  if (modules?.length) {
+    const set = new Set(modules);
+    out = out.filter((t) => t.moduleId && set.has(t.moduleId));
   }
 
   if (vs.sort.field) {
@@ -67,6 +73,16 @@ function cmp(a: TaskWithRelations, b: TaskWithRelations, field: SortField): numb
       const da = a.dueDate ? +new Date(a.dueDate) : Infinity;
       const db = b.dueDate ? +new Date(b.dueDate) : Infinity;
       return da - db;
+    }
+    case "startDate": {
+      const da = a.startDate ? +new Date(a.startDate) : Infinity;
+      const db = b.startDate ? +new Date(b.startDate) : Infinity;
+      return da - db;
+    }
+    case "timeEstimate": {
+      const ea = a.timeEstimate ?? Infinity;
+      const eb = b.timeEstimate ?? Infinity;
+      return ea - eb;
     }
     case "name":
       return a.name.localeCompare(b.name);

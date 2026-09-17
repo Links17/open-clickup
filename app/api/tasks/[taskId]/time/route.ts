@@ -2,9 +2,10 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { prisma } from "@/lib/db";
 import { requireUser } from "@/lib/auth";
-import { userSelect } from "@/lib/queries";
 import { ApiError, readJson, route } from "@/lib/api-helpers";
 import { publish } from "@/lib/events";
+import { todayWorkDate } from "@/lib/time";
+import { startTimer, stopTimer, upsertDayLog } from "@/lib/timesheet";
 
 type Ctx = { params: Promise<{ taskId: string }> };
 
@@ -13,7 +14,9 @@ const schema = z.discriminatedUnion("action", [
   z.object({ action: z.literal("stop") }),
   z.object({
     action: z.literal("log"),
-    durationSeconds: z.number().int().positive(),
+    durationSeconds: z.number().int().min(0),
+    workDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+    userId: z.string().optional(),
     description: z.string().trim().max(500).optional(),
   }),
 ]);
@@ -27,53 +30,29 @@ export const POST = route(async (req, { params }: Ctx) => {
   if (!task) throw new ApiError(404, "Task not found");
 
   if (input.action === "start") {
-    // one running timer per user — stop any other running entry first
-    const running = await prisma.timeEntry.findFirst({
-      where: { userId: user.id, endedAt: null },
-    });
-    if (running) {
-      const elapsed = Math.max(0, Math.round((Date.now() - running.startedAt.getTime()) / 1000));
-      await prisma.timeEntry.update({
-        where: { id: running.id },
-        data: { endedAt: new Date(), duration: elapsed },
-      });
-    }
-    const entry = await prisma.timeEntry.create({
-      data: { taskId, userId: user.id },
-      include: { user: { select: userSelect } },
-    });
+    const entry = await startTimer(taskId, user.id);
     publish({ type: "list", listId: task.listId });
     return NextResponse.json(entry, { status: 201 });
   }
 
   if (input.action === "stop") {
-    const running = await prisma.timeEntry.findFirst({
-      where: { taskId, userId: user.id, endedAt: null },
-    });
-    if (!running) throw new ApiError(400, "No running timer for this task");
-    const elapsed = Math.max(0, Math.round((Date.now() - running.startedAt.getTime()) / 1000));
-    const entry = await prisma.timeEntry.update({
-      where: { id: running.id },
-      data: { endedAt: new Date(), duration: elapsed },
-      include: { user: { select: userSelect } },
-    });
+    const entry = await stopTimer(taskId, user.id);
     publish({ type: "list", listId: task.listId });
     return NextResponse.json(entry);
   }
 
-  // manual log
-  const now = new Date();
-  const entry = await prisma.timeEntry.create({
-    data: {
-      taskId,
-      userId: user.id,
-      duration: input.durationSeconds,
-      description: input.description,
-      startedAt: new Date(now.getTime() - input.durationSeconds * 1000),
-      endedAt: now,
-    },
-    include: { user: { select: userSelect } },
+  if (input.userId && input.userId !== user.id) {
+    throw new ApiError(403, "You can only log your own hours.");
+  }
+
+  const entry = await upsertDayLog({
+    taskId,
+    userId: user.id,
+    workDate: input.workDate ?? todayWorkDate(),
+    durationSeconds: input.durationSeconds,
+    description: input.description,
   });
   publish({ type: "list", listId: task.listId });
+  if (!entry) return NextResponse.json({ ok: true, deleted: true });
   return NextResponse.json(entry, { status: 201 });
 });

@@ -7,6 +7,7 @@ import { cn } from "@/lib/utils";
 import type { CustomFieldWithOptions } from "@/lib/queries";
 import { CustomFieldType } from "@/lib/enums";
 import { DateControl } from "@/components/menus/date-control";
+import { displayLabel, useT } from "@/lib/i18n";
 
 export function CustomFieldControl({
   field,
@@ -50,7 +51,7 @@ export function CustomFieldControl({
       <DateControl
         value={typeof value === "string" ? value : null}
         onChange={(d) => onChange(d ? d.toISOString() : null)}
-        placeholder={compact ? "" : "Set date"}
+        placeholder={compact ? "" : undefined}
       />
     );
   }
@@ -86,6 +87,7 @@ function OptionPicker({
     }
   }
   const chosen = field.options.filter((o) => selected.has(o.id));
+  const t = useT();
 
   return (
     <Popover.Root>
@@ -94,7 +96,7 @@ function OptionPicker({
           {chosen.length ? (
             chosen.map((o) => (
               <span key={o.id} className="inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-medium" style={{ color: o.color, backgroundColor: `${o.color}22` }}>
-                {o.label}
+                {displayLabel(t, o.label)}
               </span>
             ))
           ) : (
@@ -107,11 +109,11 @@ function OptionPicker({
           {field.options.map((o) => (
             <button key={o.id} onClick={() => toggle(o.id)} className="flex w-full items-center gap-2 rounded px-2 py-1.5 text-left text-[13px] hover:bg-cu-hover">
               <span className="h-3 w-3 rounded-full" style={{ backgroundColor: o.color }} />
-              <span className="flex-1 truncate">{o.label}</span>
+              <span className="flex-1 truncate">{displayLabel(t, o.label)}</span>
               {selected.has(o.id) && <Check className="h-3.5 w-3.5 text-cu-purple" />}
             </button>
           ))}
-          {!field.options.length && <div className="px-2 py-2 text-[12px] text-cu-text-tertiary">No options</div>}
+          {!field.options.length && <div className="px-2 py-2 text-[12px] text-cu-text-tertiary">{t("field.noOptions")}</div>}
         </Popover.Content>
       </Popover.Portal>
     </Popover.Root>
@@ -130,6 +132,7 @@ function TextEditor({
   const isNumber = field.type === CustomFieldType.NUMBER || field.type === CustomFieldType.MONEY;
   const [open, setOpen] = useState(false);
   const [draft, setDraft] = useState("");
+  const t = useT();
 
   function commit() {
     const v = draft.trim();
@@ -159,7 +162,7 @@ function TextEditor({
             onChange={(e) => setDraft(e.target.value)}
             onKeyDown={(e) => { if (e.key === "Enter") commit(); if (e.key === "Escape") setOpen(false); }}
             onBlur={commit}
-            placeholder={field.name}
+            placeholder={displayLabel(t, field.name)}
             className="w-full rounded border border-cu-border px-2 py-1 text-[13px] outline-none focus:border-cu-purple"
           />
         </Popover.Content>

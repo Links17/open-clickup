@@ -5,6 +5,7 @@ import { cn } from "@/lib/utils";
 import { PRIORITY_CONFIG } from "@/lib/constants";
 import { Priority } from "@/lib/enums";
 import { differenceInCalendarDays, format, isToday, isTomorrow, isYesterday } from "date-fns";
+import { useI18n } from "@/lib/i18n";
 
 export function PriorityFlag({
   priority,
@@ -64,10 +65,11 @@ export function StatusBadge({
   );
 }
 
-export function TagChip({ name, color }: { name: string; color: string }) {
+export function TagChip({ name, color, className }: { name: string; color: string; className?: string }) {
   return (
     <span
-      className="inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-medium"
+      title={name}
+      className={cn("inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-medium", className)}
       style={{ color, backgroundColor: `${color}22` }}
     >
       {name}
@@ -84,6 +86,7 @@ export function DueDate({
   done?: boolean;
   className?: string;
 }) {
+  const { t, dateLocale } = useI18n();
   if (!date) return null;
   const d = typeof date === "string" ? new Date(date) : date;
   const diff = differenceInCalendarDays(d, new Date());
@@ -91,10 +94,10 @@ export function DueDate({
   const soon = diff === 0 || diff === 1;
 
   let label: string;
-  if (isToday(d)) label = "Today";
-  else if (isTomorrow(d)) label = "Tomorrow";
-  else if (isYesterday(d)) label = "Yesterday";
-  else label = format(d, "MMM d");
+  if (isToday(d)) label = t("date.today");
+  else if (isTomorrow(d)) label = t("date.tomorrow");
+  else if (isYesterday(d)) label = t("date.yesterday");
+  else label = format(d, "MMM d", { locale: dateLocale });
 
   return (
     <span

@@ -7,6 +7,7 @@ import * as Popover from "@radix-ui/react-popover";
 import { Link2, Plus, X, Search } from "lucide-react";
 import { apiGet, apiSend } from "@/lib/api";
 import type { TaskDetail } from "@/lib/queries";
+import { useT } from "@/lib/i18n";
 
 type LinkedTask = TaskDetail["blockedBy"][number]["blocker"];
 type DepType = "waiting_on" | "blocking";
@@ -43,12 +44,13 @@ export function Dependencies({
   });
 
   const hasAny = blockedBy.length > 0 || blocking.length > 0;
+  const t = useT();
 
   return (
     <section className="mt-6">
       <div className="mb-2 flex items-center gap-2">
         <h3 className="flex items-center gap-1.5 text-[13px] font-semibold text-cu-text-secondary">
-          <Link2 className="h-4 w-4" /> Dependencies
+          <Link2 className="h-4 w-4" /> {t("dep.title")}
         </h3>
         <AddDependency
           excludeId={taskId}
@@ -56,17 +58,17 @@ export function Dependencies({
         />
       </div>
 
-      {!hasAny && <p className="text-[12px] text-cu-text-tertiary">No dependencies.</p>}
+      {!hasAny && <p className="text-[12px] text-cu-text-tertiary">{t("dep.none")}</p>}
 
       {blockedBy.length > 0 && (
-        <DepGroup label="Waiting on">
+        <DepGroup label={t("dep.waitingOn")}>
           {blockedBy.map((d) => (
             <DepRow key={d.id} task={d.blocker} onRemove={() => remove.mutate(d.id)} />
           ))}
         </DepGroup>
       )}
       {blocking.length > 0 && (
-        <DepGroup label="Blocking">
+        <DepGroup label={t("dep.blocking")}>
           {blocking.map((d) => (
             <DepRow key={d.id} task={d.blocked} onRemove={() => remove.mutate(d.id)} />
           ))}
@@ -131,12 +133,13 @@ function AddDependency({
     enabled: open && q.trim().length > 0,
   });
   const results = (data?.tasks ?? []).filter((t) => t.id !== excludeId);
+  const i18nT = useT();
 
   return (
     <Popover.Root open={open} onOpenChange={setOpen}>
       <Popover.Trigger asChild>
         <button className="flex items-center gap-1 rounded px-1.5 py-0.5 text-[12px] text-cu-text-tertiary hover:bg-cu-hover hover:text-cu-purple">
-          <Plus className="h-3.5 w-3.5" /> Add
+          <Plus className="h-3.5 w-3.5" /> {i18nT("common.add")}
         </button>
       </Popover.Trigger>
       <Popover.Portal>
@@ -147,15 +150,15 @@ function AddDependency({
           className="z-50 w-[320px] overflow-hidden rounded-lg border border-cu-border bg-cu-panel shadow-lg"
         >
           <div className="flex border-b border-cu-border p-1">
-            {(["waiting_on", "blocking"] as const).map((t) => (
+            {(["waiting_on", "blocking"] as const).map((kind) => (
               <button
-                key={t}
-                onClick={() => setType(t)}
+                key={kind}
+                onClick={() => setType(kind)}
                 className={`flex-1 rounded px-2 py-1 text-[12px] font-medium ${
-                  type === t ? "bg-cu-purple-light text-cu-purple" : "text-cu-text-secondary hover:bg-cu-hover"
+                  type === kind ? "bg-cu-purple-light text-cu-purple" : "text-cu-text-secondary hover:bg-cu-hover"
                 }`}
               >
-                {t === "waiting_on" ? "Waiting on" : "Blocking"}
+                {kind === "waiting_on" ? i18nT("dep.waitingOn") : i18nT("dep.blocking")}
               </button>
             ))}
           </div>
@@ -165,16 +168,16 @@ function AddDependency({
               autoFocus
               value={q}
               onChange={(e) => setQ(e.target.value)}
-              placeholder="Search tasks…"
+              placeholder={i18nT("dep.searchTasks")}
               className="flex-1 bg-transparent text-[13px] outline-none placeholder:text-cu-text-tertiary"
             />
           </div>
           <div className="max-h-[260px] overflow-y-auto py-1">
             {q.trim() === "" && (
-              <p className="px-3 py-3 text-[12px] text-cu-text-tertiary">Type to search tasks.</p>
+              <p className="px-3 py-3 text-[12px] text-cu-text-tertiary">{i18nT("dep.typeToSearch")}</p>
             )}
             {q.trim() !== "" && results.length === 0 && (
-              <p className="px-3 py-3 text-[12px] text-cu-text-tertiary">No matches.</p>
+              <p className="px-3 py-3 text-[12px] text-cu-text-tertiary">{i18nT("dep.noMatches")}</p>
             )}
             {results.map((t) => (
               <button

@@ -16,7 +16,7 @@ export default function GlobalError({
   }, [error]);
 
   return (
-    <html lang="en">
+    <html lang="zh-CN">
       <body
         style={{
           margin: 0,
@@ -30,9 +30,9 @@ export default function GlobalError({
         }}
       >
         <div style={{ textAlign: "center", padding: 40 }}>
-          <h2 style={{ margin: "0 0 8px", fontSize: 18 }}>Something went wrong</h2>
+          <h2 style={{ margin: "0 0 8px", fontSize: 18 }}>出了点问题</h2>
           <p style={{ margin: "0 0 16px", fontSize: 13, color: "#9aa1ad" }}>
-            The app hit an unexpected error.
+            应用遇到了意外错误。
           </p>
           <button
             onClick={reset}
@@ -47,7 +47,7 @@ export default function GlobalError({
               cursor: "pointer",
             }}
           >
-            Reload
+            重新加载
           </button>
         </div>
       </body>

@@ -1,8 +1,10 @@
 "use client";
 
 import { useState } from "react";
+import { useT } from "@/lib/i18n";
 
 export default function LoginPage() {
+  const t = useT();
   const [mode, setMode] = useState<"login" | "signup">("login");
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
@@ -24,12 +26,11 @@ export default function LoginPage() {
       });
       if (!res.ok) {
         const data = await res.json().catch(() => ({}));
-        throw new Error(data.error || "Something went wrong");
+        throw new Error(data.error || t("auth.somethingWrong"));
       }
-      // hard navigation so the session cookie is picked up everywhere
       window.location.href = "/";
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed");
+      setError(err instanceof Error ? err.message : t("auth.failed"));
       setBusy(false);
     }
   }
@@ -44,25 +45,25 @@ export default function LoginPage() {
 
         <div className="rounded-xl border border-cu-border bg-cu-panel p-6 shadow-sm">
           <h1 className="mb-1 text-lg font-semibold text-cu-text">
-            {mode === "login" ? "Welcome back" : "Create your account"}
+            {mode === "login" ? t("auth.welcomeBack") : t("auth.createAccount")}
           </h1>
           <p className="mb-5 text-[13px] text-cu-text-secondary">
-            {mode === "login" ? "Log in to your workspace." : "Sign up to get started."}
+            {mode === "login" ? t("auth.logInToWorkspace") : t("auth.signUpToStart")}
           </p>
 
           <form onSubmit={submit} className="space-y-3">
             {mode === "signup" && (
-              <Field label="Name">
+              <Field label={t("auth.name")}>
                 <input
                   value={name}
                   onChange={(e) => setName(e.target.value)}
                   required
                   className="cu-input"
-                  placeholder="Your name"
+                  placeholder={t("auth.yourName")}
                 />
               </Field>
             )}
-            <Field label="Email">
+            <Field label={t("auth.email")}>
               <input
                 type="email"
                 value={email}
@@ -73,7 +74,7 @@ export default function LoginPage() {
                 placeholder="you@company.com"
               />
             </Field>
-            <Field label="Password">
+            <Field label={t("auth.password")}>
               <input
                 type="password"
                 value={password}
@@ -91,7 +92,7 @@ export default function LoginPage() {
               disabled={busy}
               className="w-full rounded-md bg-cu-purple py-2 text-[14px] font-medium text-white hover:bg-cu-purple-dark disabled:opacity-50"
             >
-              {busy ? "…" : mode === "login" ? "Log In" : "Sign Up"}
+              {busy ? "…" : mode === "login" ? t("auth.logIn") : t("auth.signUp")}
             </button>
           </form>
 
@@ -99,14 +100,12 @@ export default function LoginPage() {
             onClick={() => { setMode(mode === "login" ? "signup" : "login"); setError(null); }}
             className="mt-4 w-full text-center text-[13px] text-cu-text-secondary hover:text-cu-purple"
           >
-            {mode === "login" ? "Don't have an account? Sign up" : "Already have an account? Log in"}
+            {mode === "login" ? t("auth.noAccount") : t("auth.hasAccount")}
           </button>
         </div>
 
         {mode === "login" && (
-          <p className="mt-4 text-center text-[12px] text-cu-text-tertiary">
-            Demo: santiago@clickuppp.dev / password
-          </p>
+          <p className="mt-4 text-center text-[12px] text-cu-text-tertiary">{t("auth.demo")}</p>
         )}
       </div>
     </div>

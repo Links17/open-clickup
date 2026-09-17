@@ -10,13 +10,12 @@ import {
   Plus,
   Search,
   House,
-  LayoutGrid,
+  Boxes,
   Ellipsis,
   Folder as FolderIcon,
   FolderOpen,
   List as ListIcon,
   Settings,
-  Bell,
   PanelLeftClose,
   Trash2,
   Pencil,
@@ -32,13 +31,18 @@ import { useHierarchy } from "@/lib/hooks";
 import { ThemeToggle } from "@/components/ui/theme-toggle";
 import { InboxButton } from "@/components/sidebar/inbox";
 import { ProfileDialog } from "@/components/profile-dialog";
+import { SettingsDialog } from "@/components/settings-dialog";
 import type { SpaceNode, FolderNode, ListNode } from "@/lib/queries";
 import { Avatar } from "@/components/ui/avatar";
+import { useT } from "@/lib/i18n";
 
 export function Sidebar({ onCollapse }: { onCollapse?: () => void }) {
   const { workspace, favorites } = useWorkspace();
   const { createSpace } = useHierarchy();
+  const t = useT();
   const [creatingSpace, setCreatingSpace] = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [profileOpen, setProfileOpen] = useState(false);
   const router = useRouter();
   const pathname = usePathname();
 
@@ -50,7 +54,7 @@ export function Sidebar({ onCollapse }: { onCollapse?: () => void }) {
     <aside className="flex h-full w-[var(--sidebar-w,260px)] shrink-0 flex-col border-r border-cu-border bg-cu-sidebar text-cu-text">
       {/* Workspace header */}
       <div className="flex items-center gap-2 px-3 py-2.5">
-        <button className="flex min-w-0 flex-1 items-center gap-2 rounded-md px-1.5 py-1 hover:bg-cu-hover-strong">
+        <div className="flex min-w-0 flex-1 items-center gap-2 rounded-md px-1.5 py-1">
           <span
             className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md text-xs font-bold text-white"
             style={{ backgroundColor: workspace.color }}
@@ -58,12 +62,11 @@ export function Sidebar({ onCollapse }: { onCollapse?: () => void }) {
             {workspace.name[0]}
           </span>
           <span className="truncate text-sm font-semibold">{workspace.name}</span>
-          <ChevronDown className="ml-auto h-3.5 w-3.5 text-cu-text-tertiary" />
-        </button>
+        </div>
         <button
           onClick={onCollapse}
           className="rounded p-1 text-cu-text-tertiary hover:bg-cu-hover-strong hover:text-cu-text"
-          title="Collapse sidebar"
+          title={t("nav.collapseSidebar")}
         >
           <PanelLeftClose className="h-4 w-4" />
         </button>
@@ -76,7 +79,7 @@ export function Sidebar({ onCollapse }: { onCollapse?: () => void }) {
           className="flex w-full items-center gap-2 rounded-md border border-cu-border bg-cu-panel px-2.5 py-1.5 text-[13px] text-cu-text-tertiary hover:border-cu-border-strong"
         >
           <Search className="h-3.5 w-3.5" />
-          <span>Search</span>
+          <span>{t("nav.search")}</span>
           <kbd className="ml-auto rounded bg-cu-hover px-1.5 py-0.5 text-[10px] text-cu-text-tertiary">⌘K</kbd>
         </button>
       </div>
@@ -85,18 +88,23 @@ export function Sidebar({ onCollapse }: { onCollapse?: () => void }) {
       <nav className="px-2">
         <NavItem
           icon={<House className="h-4 w-4" />}
-          label="Home"
+          label={t("nav.home")}
           active={pathname === "/home"}
           onClick={() => router.push("/home")}
         />
         <InboxButton />
-        <NavItem icon={<LayoutGrid className="h-4 w-4" />} label="Dashboards" />
+        <NavItem
+          icon={<Boxes className="h-4 w-4" />}
+          label={t("nav.modules")}
+          active={pathname === "/modules" || pathname.startsWith("/modules/")}
+          onClick={() => router.push("/modules")}
+        />
       </nav>
 
       {favLists.length > 0 && (
         <div className="mt-1 px-2">
           <div className="px-2 pb-1 text-[11px] font-semibold uppercase tracking-wide text-cu-text-tertiary">
-            Favorites
+            {t("nav.favorites")}
           </div>
           {favLists.map((l) => (
             <button
@@ -115,11 +123,11 @@ export function Sidebar({ onCollapse }: { onCollapse?: () => void }) {
 
       {/* Spaces */}
       <div className="flex items-center justify-between px-4 pb-1">
-        <span className="text-[11px] font-semibold uppercase tracking-wide text-cu-text-tertiary">Spaces</span>
+        <span className="text-[11px] font-semibold uppercase tracking-wide text-cu-text-tertiary">{t("nav.spaces")}</span>
         <button
           onClick={() => setCreatingSpace(true)}
           className="rounded p-0.5 text-cu-text-tertiary hover:bg-cu-hover-strong hover:text-cu-text"
-          title="New Space"
+          title={t("nav.newSpace")}
         >
           <Plus className="h-3.5 w-3.5" />
         </button>
@@ -132,7 +140,7 @@ export function Sidebar({ onCollapse }: { onCollapse?: () => void }) {
         {creatingSpace && (
           <InlineInput
             depth={0}
-            placeholder="Space name"
+            placeholder={t("nav.spaceName")}
             onSubmit={(name) => {
               createSpace.mutate(name);
               setCreatingSpace(false);
@@ -144,17 +152,20 @@ export function Sidebar({ onCollapse }: { onCollapse?: () => void }) {
 
       {/* Footer */}
       <div className="flex items-center gap-2 border-t border-cu-border px-3 py-2">
-        <UserSwitcher />
+        <UserSwitcher onEditProfile={() => setProfileOpen(true)} />
         <div className="ml-auto flex items-center gap-0.5">
           <ThemeToggle />
-          <button className="rounded p-1 text-cu-text-tertiary hover:bg-cu-hover-strong hover:text-cu-text">
-            <Bell className="h-4 w-4" />
-          </button>
-          <button className="rounded p-1 text-cu-text-tertiary hover:bg-cu-hover-strong hover:text-cu-text">
+          <button
+            onClick={() => setSettingsOpen(true)}
+            className="rounded p-1 text-cu-text-tertiary hover:bg-cu-hover-strong hover:text-cu-text"
+            title={t("common.settings")}
+          >
             <Settings className="h-4 w-4" />
           </button>
         </div>
       </div>
+      <SettingsDialog open={settingsOpen} onClose={() => setSettingsOpen(false)} />
+      <ProfileDialog open={profileOpen} onClose={() => setProfileOpen(false)} />
     </aside>
   );
 }
@@ -189,11 +200,11 @@ function NavItem({
   );
 }
 
-function UserSwitcher() {
+function UserSwitcher({ onEditProfile }: { onEditProfile: () => void }) {
   const { workspace, currentUser } = useWorkspace();
+  const t = useT();
   const qc = useQueryClient();
   const members = workspace.members.map((m) => m.user);
-  const [profileOpen, setProfileOpen] = useState(false);
 
   async function switchTo(userId: string) {
     if (userId === currentUser.id) return;
@@ -222,7 +233,7 @@ function UserSwitcher() {
           className="z-50 min-w-[220px] rounded-lg border border-cu-border bg-cu-panel p-1 shadow-lg"
         >
           <div className="px-2 py-1.5 text-[11px] font-semibold uppercase tracking-wide text-cu-text-tertiary">
-            Switch user
+            {t("nav.switchUser")}
           </div>
           {members.map((u) => (
             <DropdownMenu.Item
@@ -232,25 +243,24 @@ function UserSwitcher() {
             >
               <Avatar user={u} size="md" />
               <span className="flex-1 truncate">{u.name}</span>
-              {u.id === currentUser.id && <span className="text-[11px] text-cu-purple">current</span>}
+              {u.id === currentUser.id && <span className="text-[11px] text-cu-purple">{t("common.current")}</span>}
             </DropdownMenu.Item>
           ))}
           <DropdownMenu.Separator className="my-1 h-px bg-cu-border" />
           <DropdownMenu.Item
-            onSelect={() => setProfileOpen(true)}
+            onSelect={onEditProfile}
             className="flex cursor-pointer items-center gap-2 rounded px-2 py-1.5 text-[13px] outline-none hover:bg-cu-hover focus:bg-cu-hover"
           >
-            <Settings className="h-4 w-4" /> Edit profile
+            <Settings className="h-4 w-4" /> {t("nav.editProfile")}
           </DropdownMenu.Item>
           <DropdownMenu.Item
             onSelect={logout}
             className="flex cursor-pointer items-center gap-2 rounded px-2 py-1.5 text-[13px] text-cu-text-secondary outline-none hover:bg-cu-hover focus:bg-cu-hover"
           >
-            <LogOut className="h-4 w-4" /> Log out
+            <LogOut className="h-4 w-4" /> {t("nav.logOut")}
           </DropdownMenu.Item>
         </DropdownMenu.Content>
       </DropdownMenu.Portal>
-      <ProfileDialog open={profileOpen} onClose={() => setProfileOpen(false)} />
     </DropdownMenu.Root>
   );
 }
@@ -258,6 +268,7 @@ function UserSwitcher() {
 function SpaceItem({ space }: { space: SpaceNode }) {
   const router = useRouter();
   const { createList, createFolder, rename, remove } = useHierarchy();
+  const t = useT();
   const [open, setOpen] = useState(true);
   const [creating, setCreating] = useState<"list" | "folder" | null>(null);
   const [renaming, setRenaming] = useState(false);
@@ -297,11 +308,11 @@ function SpaceItem({ space }: { space: SpaceNode }) {
         label={space.name}
         bold
         onRename={() => setRenaming(true)}
-        onDelete={() => remove.mutate({ kind: "spaces", id: space.id })}
+        onDelete={() => remove.mutate({ kind: "spaces", id: space.id, name: space.name })}
         addMenu={
           <>
-            <MenuItem icon={<ListIcon className="h-4 w-4" />} label="New List" onSelect={() => { setOpen(true); setCreating("list"); }} />
-            <MenuItem icon={<FolderPlus className="h-4 w-4" />} label="New Folder" onSelect={() => { setOpen(true); setCreating("folder"); }} />
+            <MenuItem icon={<ListIcon className="h-4 w-4" />} label={t("nav.newList")} onSelect={() => { setOpen(true); setCreating("list"); }} />
+            <MenuItem icon={<FolderPlus className="h-4 w-4" />} label={t("nav.newFolder")} onSelect={() => { setOpen(true); setCreating("folder"); }} />
           </>
         }
       />
@@ -316,7 +327,7 @@ function SpaceItem({ space }: { space: SpaceNode }) {
           {creating === "list" && (
             <InlineInput
               depth={1}
-              placeholder="List name"
+              placeholder={t("nav.listName")}
               leading={<ListIcon className="h-4 w-4 text-cu-text-secondary" />}
               onSubmit={async (name) => {
                 const l = await createList.mutateAsync({ spaceId: space.id, name });
@@ -329,7 +340,7 @@ function SpaceItem({ space }: { space: SpaceNode }) {
           {creating === "folder" && (
             <InlineInput
               depth={1}
-              placeholder="Folder name"
+              placeholder={t("nav.folderName")}
               leading={<FolderIcon className="h-4 w-4 text-cu-text-secondary" />}
               onSubmit={(name) => {
                 createFolder.mutate({ spaceId: space.id, name });
@@ -347,6 +358,7 @@ function SpaceItem({ space }: { space: SpaceNode }) {
 function FolderItem({ folder }: { folder: FolderNode }) {
   const router = useRouter();
   const { createList, rename, remove } = useHierarchy();
+  const t = useT();
   const [open, setOpen] = useState(false);
   const [creating, setCreating] = useState(false);
   const [renaming, setRenaming] = useState(false);
@@ -376,7 +388,7 @@ function FolderItem({ folder }: { folder: FolderNode }) {
         leading={open ? <FolderOpen className="h-4 w-4 text-cu-text-secondary" /> : <FolderIcon className="h-4 w-4 text-cu-text-secondary" />}
         label={folder.name}
         onRename={() => setRenaming(true)}
-        onDelete={() => remove.mutate({ kind: "folders", id: folder.id })}
+        onDelete={() => remove.mutate({ kind: "folders", id: folder.id, name: folder.name })}
         onAdd={() => { setOpen(true); setCreating(true); }}
       />
       {open && (
@@ -387,7 +399,7 @@ function FolderItem({ folder }: { folder: FolderNode }) {
           {creating && (
             <InlineInput
               depth={2}
-              placeholder="List name"
+              placeholder={t("nav.listName")}
               leading={<ListIcon className="h-4 w-4 text-cu-text-secondary" />}
               onSubmit={async (name) => {
                 const l = await createList.mutateAsync({ spaceId: folder.spaceId, folderId: folder.id, name });
@@ -446,7 +458,7 @@ function ListItemRow({ list, depth }: { list: ListNode & { spaceId?: string }; d
           onRename={() => setRenaming(true)}
           onDelete={() => {
             if (active) router.push("/");
-            remove.mutate({ kind: "lists", id: list.id });
+            remove.mutate({ kind: "lists", id: list.id, name: list.name });
           }}
         />
       </span>
@@ -479,6 +491,7 @@ function Row({
   onAdd?: () => void;
   addMenu?: React.ReactNode;
 }) {
+  const t = useT();
   return (
     <div
       className="group flex w-full items-center gap-1.5 rounded-md py-1.5 pr-2 text-[13px] text-cu-text hover:bg-cu-hover-strong"
@@ -493,20 +506,29 @@ function Row({
       </button>
       {(onRename || onDelete) && <RowMenu onRename={onRename} onDelete={onDelete} />}
       {addMenu ? (
-        <DropdownMenu.Root>
+        <DropdownMenu.Root modal={false}>
           <DropdownMenu.Trigger asChild>
-            <button className="hidden rounded p-0.5 text-cu-text-tertiary hover:bg-cu-hover group-hover:block" title="Add">
-              <Plus className="h-3.5 w-3.5" />
+            <button
+              type="button"
+              className="flex h-6 w-6 items-center justify-center rounded text-cu-text-tertiary hover:bg-cu-hover hover:text-cu-text data-[state=open]:bg-cu-hover data-[state=open]:text-cu-text data-[state=open]:[&>svg]:opacity-100"
+              title={t("common.add")}
+            >
+              <Plus className="h-3.5 w-3.5 opacity-0 group-hover:opacity-100" />
             </button>
           </DropdownMenu.Trigger>
           <DropdownMenu.Portal>
-            <DropdownMenu.Content sideOffset={4} align="end" className="z-50 min-w-[160px] rounded-lg border border-cu-border bg-cu-panel p-1 shadow-lg">
+            <DropdownMenu.Content
+              side="bottom"
+              align="end"
+              sideOffset={4}
+              className="z-50 min-w-[160px] rounded-lg border border-cu-border bg-cu-panel p-1 shadow-lg"
+            >
               {addMenu}
             </DropdownMenu.Content>
           </DropdownMenu.Portal>
         </DropdownMenu.Root>
       ) : onAdd ? (
-        <button onClick={onAdd} className="hidden rounded p-0.5 text-cu-text-tertiary hover:bg-cu-hover group-hover:block" title="New List">
+        <button onClick={onAdd} className="hidden rounded p-0.5 text-cu-text-tertiary hover:bg-cu-hover group-hover:block" title={t("nav.newList")}>
           <Plus className="h-3.5 w-3.5" />
         </button>
       ) : null}
@@ -515,20 +537,28 @@ function Row({
 }
 
 function RowMenu({ onRename, onDelete }: { onRename?: () => void; onDelete?: () => void }) {
+  const t = useT();
   return (
-    <DropdownMenu.Root>
+    <DropdownMenu.Root modal={false}>
       <DropdownMenu.Trigger asChild>
         <button
+          type="button"
           onClick={(e) => { e.preventDefault(); e.stopPropagation(); }}
-          className="hidden rounded p-0.5 text-cu-text-tertiary hover:bg-cu-hover group-hover:block"
+          className="flex h-6 w-6 items-center justify-center rounded text-cu-text-tertiary hover:bg-cu-hover hover:text-cu-text data-[state=open]:bg-cu-hover data-[state=open]:text-cu-text data-[state=open]:[&>svg]:opacity-100"
+          aria-label={t("common.more")}
         >
-          <Ellipsis className="h-3.5 w-3.5" />
+          <Ellipsis className="h-3.5 w-3.5 opacity-0 group-hover:opacity-100" />
         </button>
       </DropdownMenu.Trigger>
       <DropdownMenu.Portal>
-        <DropdownMenu.Content sideOffset={4} align="end" className="z-50 min-w-[150px] rounded-lg border border-cu-border bg-cu-panel p-1 shadow-lg">
-          {onRename && <MenuItem icon={<Pencil className="h-4 w-4" />} label="Rename" onSelect={onRename} />}
-          {onDelete && <MenuItem icon={<Trash2 className="h-4 w-4" />} label="Delete" onSelect={onDelete} danger />}
+        <DropdownMenu.Content
+          side="bottom"
+          align="end"
+          sideOffset={4}
+          className="z-50 min-w-[150px] rounded-lg border border-cu-border bg-cu-panel p-1 shadow-lg"
+        >
+          {onRename && <MenuItem icon={<Pencil className="h-4 w-4" />} label={t("common.rename")} onSelect={onRename} />}
+          {onDelete && <MenuItem icon={<Trash2 className="h-4 w-4" />} label={t("common.delete")} onSelect={onDelete} danger />}
         </DropdownMenu.Content>
       </DropdownMenu.Portal>
     </DropdownMenu.Root>

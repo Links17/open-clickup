@@ -6,6 +6,7 @@ import { Check, Plus, Trash2, SquareCheckBig } from "lucide-react";
 import { apiSend } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import type { TaskDetail } from "@/lib/queries";
+import { useT } from "@/lib/i18n";
 
 type ChecklistData = TaskDetail["checklists"][number];
 
@@ -18,6 +19,7 @@ export function Checklists({
   checklists: ChecklistData[];
   onChange: () => void;
 }) {
+  const t = useT();
   async function addChecklist() {
     await apiSend(`/api/tasks/${taskId}/checklists`, "POST", {});
     onChange();
@@ -26,7 +28,7 @@ export function Checklists({
   return (
     <section className="mt-6">
       <div className="mb-2 flex items-center gap-1.5 text-[13px] font-semibold text-cu-text-secondary">
-        <SquareCheckBig className="h-4 w-4" /> Checklists
+        <SquareCheckBig className="h-4 w-4" /> {t("checklist.title")}
       </div>
 
       {checklists.map((cl) => (
@@ -37,7 +39,7 @@ export function Checklists({
         onClick={addChecklist}
         className="mt-2 flex items-center gap-1.5 rounded px-1 py-1 text-[13px] text-cu-text-tertiary hover:text-cu-text-secondary"
       >
-        <Plus className="h-3.5 w-3.5" /> Add checklist
+        <Plus className="h-3.5 w-3.5" /> {t("checklist.add")}
       </button>
     </section>
   );
@@ -48,6 +50,7 @@ function ChecklistBlock({ checklist, onChange }: { checklist: ChecklistData; onC
   const done = checklist.items.filter((i) => i.resolved).length;
   const total = checklist.items.length;
   const pct = total ? Math.round((done / total) * 100) : 0;
+  const t = useT();
 
   async function toggle(itemId: string, resolved: boolean) {
     await apiSend(`/api/checklist-items/${itemId}`, "PATCH", { resolved });
@@ -121,7 +124,7 @@ function ChecklistBlock({ checklist, onChange }: { checklist: ChecklistData; onC
             value={adding}
             onChange={(e) => setAdding(e.target.value)}
             onKeyDown={(e) => { if (e.key === "Enter") addItem(); }}
-            placeholder="Add an item"
+            placeholder={t("checklist.addItem")}
             className="flex-1 bg-transparent text-[13px] outline-none placeholder:text-cu-text-tertiary"
           />
         </div>

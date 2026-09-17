@@ -23,6 +23,7 @@ const patchSchema = z.object({
   assigneeIds: z.array(z.string()).optional(),
   tagIds: z.array(z.string()).optional(),
   watcherIds: z.array(z.string()).optional(),
+  moduleId: z.string().nullish(),
 });
 
 export const GET = route(async (_req, { params }: Ctx) => {

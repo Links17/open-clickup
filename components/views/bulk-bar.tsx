@@ -4,11 +4,12 @@ import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
 import { X, Trash2, Flag } from "lucide-react";
 import type { StatusModel } from "@/lib/queries";
 import { Priority } from "@/lib/enums";
-import { PRIORITY_ORDER, PRIORITY_CONFIG } from "@/lib/constants";
+import { PRIORITY_ORDER } from "@/lib/constants";
 import { PriorityFlag } from "@/components/ui/primitives";
 import { StatusCircle } from "@/components/menus/status-control";
 import { Avatar } from "@/components/ui/avatar";
 import { useWorkspace } from "@/components/workspace-context";
+import { useT } from "@/lib/i18n";
 
 export function BulkBar({
   count,
@@ -29,6 +30,7 @@ export function BulkBar({
 }) {
   const { workspace } = useWorkspace();
   const members = workspace.members.map((m) => m.user);
+  const t = useT();
 
   return (
     <div className="pointer-events-none fixed inset-x-0 bottom-5 z-40 flex justify-center">
@@ -37,11 +39,11 @@ export function BulkBar({
           <span className="flex h-5 min-w-5 items-center justify-center rounded-full bg-cu-purple px-1.5 text-[11px] font-bold">
             {count}
           </span>
-          selected
+          {t("bulk.selected")}
         </span>
         <span className="mx-1 h-5 w-px bg-white/20" />
 
-        <BarMenu label="Status">
+        <BarMenu label={t("status.title")}>
           {statuses.map((s) => (
             <Item key={s.id} onSelect={() => onSetStatus(s.id)}>
               <StatusCircle status={s} size={14} />
@@ -50,19 +52,19 @@ export function BulkBar({
           ))}
         </BarMenu>
 
-        <BarMenu label="Priority">
+        <BarMenu label={t("priority.title")} icon>
           {PRIORITY_ORDER.map((p) => (
             <Item key={p} onSelect={() => onSetPriority(p)}>
-              <PriorityFlag priority={p} /> {PRIORITY_CONFIG[p].label}
+              <PriorityFlag priority={p} /> {t(`priority.${p}`)}
             </Item>
           ))}
           <div className="my-1 h-px bg-cu-border" />
           <Item onSelect={() => onSetPriority(null)}>
-            <X className="h-3.5 w-3.5" /> Clear
+            <X className="h-3.5 w-3.5" /> {t("common.clear")}
           </Item>
         </BarMenu>
 
-        <BarMenu label="Assign">
+        <BarMenu label={t("bulk.assign")}>
           <AssignPicker members={members} onApply={onSetAssignees} />
         </BarMenu>
 
@@ -70,11 +72,11 @@ export function BulkBar({
           onClick={onDelete}
           className="flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-[13px] hover:bg-white/10"
         >
-          <Trash2 className="h-4 w-4" /> Delete
+          <Trash2 className="h-4 w-4" /> {t("common.delete")}
         </button>
 
         <span className="mx-1 h-5 w-px bg-white/20" />
-        <button onClick={onClear} className="rounded-lg p-1.5 hover:bg-white/10" title="Clear selection">
+        <button onClick={onClear} className="rounded-lg p-1.5 hover:bg-white/10" title={t("bulk.clearSelection")}>
           <X className="h-4 w-4" />
         </button>
       </div>
@@ -82,12 +84,12 @@ export function BulkBar({
   );
 }
 
-function BarMenu({ label, children }: { label: string; children: React.ReactNode }) {
+function BarMenu({ label, icon, children }: { label: string; icon?: boolean; children: React.ReactNode }) {
   return (
     <DropdownMenu.Root>
       <DropdownMenu.Trigger asChild>
         <button className="flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-[13px] hover:bg-white/10">
-          {label === "Priority" ? <Flag className="h-4 w-4" /> : null}
+          {icon ? <Flag className="h-4 w-4" /> : null}
           {label}
         </button>
       </DropdownMenu.Trigger>
@@ -122,10 +124,11 @@ function AssignPicker({
   members: { id: string; name: string; color: string; avatarUrl: string | null }[];
   onApply: (ids: string[]) => void;
 }) {
+  const t = useT();
   return (
     <>
       <div className="px-2 py-1 text-[11px] font-semibold uppercase tracking-wide text-cu-text-tertiary">
-        Set assignee
+        {t("bulk.setAssignee")}
       </div>
       {members.map((u) => (
         <DropdownMenu.Item
@@ -141,7 +144,7 @@ function AssignPicker({
         onSelect={() => onApply([])}
         className="flex cursor-pointer items-center gap-2 rounded px-2 py-1.5 text-[13px] text-cu-text-secondary outline-none hover:bg-cu-hover"
       >
-        <X className="h-3.5 w-3.5" /> Unassign all
+        <X className="h-3.5 w-3.5" /> {t("bulk.unassignAll")}
       </DropdownMenu.Item>
     </>
   );

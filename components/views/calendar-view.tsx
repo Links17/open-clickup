@@ -29,8 +29,8 @@ import { cn } from "@/lib/utils";
 import type { ListData, TaskWithRelations } from "@/lib/queries";
 import { StatusCircle } from "@/components/menus/status-control";
 import { useUpdateTask } from "@/lib/hooks";
+import { useI18n } from "@/lib/i18n";
 
-const WEEKDAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 type Mode = "month" | "week";
 
 export function CalendarView({
@@ -44,13 +44,17 @@ export function CalendarView({
   const [mode, setMode] = useState<Mode>("month");
   const update = useUpdateTask(data.list.id);
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 4 } }));
+  const { t, dateLocale } = useI18n();
 
   const days = useMemo(() => {
     if (mode === "week") {
-      return eachDayOfInterval({ start: startOfWeek(cursor), end: endOfWeek(cursor) });
+      return eachDayOfInterval({ start: startOfWeek(cursor, { locale: dateLocale }), end: endOfWeek(cursor, { locale: dateLocale }) });
     }
-    return eachDayOfInterval({ start: startOfWeek(startOfMonth(cursor)), end: endOfWeek(endOfMonth(cursor)) });
-  }, [cursor, mode]);
+    return eachDayOfInterval({
+      start: startOfWeek(startOfMonth(cursor), { locale: dateLocale }),
+      end: endOfWeek(endOfMonth(cursor), { locale: dateLocale }),
+    });
+  }, [cursor, mode, dateLocale]);
 
   const dayByKey = useMemo(() => {
     const m = new Map<string, Date>();
@@ -83,8 +87,8 @@ export function CalendarView({
 
   const title =
     mode === "week"
-      ? `${format(startOfWeek(cursor), "MMM d")} – ${format(endOfWeek(cursor), "MMM d, yyyy")}`
-      : format(cursor, "MMMM yyyy");
+      ? `${format(startOfWeek(cursor, { locale: dateLocale }), "MMM d", { locale: dateLocale })} – ${format(endOfWeek(cursor, { locale: dateLocale }), "MMM d, yyyy", { locale: dateLocale })}`
+      : format(cursor, "MMMM yyyy", { locale: dateLocale });
   const perDayCap = mode === "week" ? 12 : 4;
 
   return (
@@ -104,7 +108,7 @@ export function CalendarView({
           onClick={() => setCursor(new Date())}
           className="rounded border border-cu-border px-2.5 py-1 text-[13px] hover:bg-cu-hover"
         >
-          Today
+          {t("common.today")}
         </button>
         <div className="ml-auto flex rounded-md border border-cu-border p-0.5">
           {(["month", "week"] as const).map((m) => (
@@ -112,11 +116,11 @@ export function CalendarView({
               key={m}
               onClick={() => setMode(m)}
               className={cn(
-                "rounded px-2.5 py-1 text-[12px] font-medium capitalize",
+                "rounded px-2.5 py-1 text-[12px] font-medium",
                 mode === m ? "bg-cu-purple text-white" : "text-cu-text-secondary hover:bg-cu-hover",
               )}
             >
-              {m}
+              {t(`common.${m}`)}
             </button>
           ))}
         </div>
@@ -124,9 +128,9 @@ export function CalendarView({
 
       {/* weekday header */}
       <div className="grid grid-cols-7 border-y border-cu-border">
-        {WEEKDAYS.map((d) => (
-          <div key={d} className="px-2 py-1.5 text-[11px] font-semibold uppercase tracking-wide text-cu-text-tertiary">
-            {d}
+        {days.slice(0, 7).map((d) => (
+          <div key={+d} className="px-2 py-1.5 text-[11px] font-semibold uppercase tracking-wide text-cu-text-tertiary">
+            {format(d, "EEE", { locale: dateLocale })}
           </div>
         ))}
       </div>
@@ -155,7 +159,7 @@ export function CalendarView({
                     <DraggableTask key={t.id} task={t} onOpen={() => onOpenTask(t.id)} />
                   ))}
                   {tasks.length > perDayCap && (
-                    <div className="px-1 text-[11px] text-cu-text-tertiary">+{tasks.length - perDayCap} more</div>
+                    <div className="px-1 text-[11px] text-cu-text-tertiary">{t("list.calendarMore", { n: tasks.length - perDayCap })}</div>
                   )}
                 </div>
               </DayCell>

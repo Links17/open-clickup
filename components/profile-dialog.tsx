@@ -7,9 +7,11 @@ import { X, Camera } from "lucide-react";
 import { apiSend } from "@/lib/api";
 import { initials } from "@/lib/utils";
 import { useWorkspace } from "@/components/workspace-context";
+import { useT } from "@/lib/i18n";
 
 export function ProfileDialog({ open, onClose }: { open: boolean; onClose: () => void }) {
   const { currentUser } = useWorkspace();
+  const t = useT();
   const qc = useQueryClient();
   const fileRef = useRef<HTMLInputElement>(null);
   const [name, setName] = useState(currentUser.name);
@@ -22,7 +24,7 @@ export function ProfileDialog({ open, onClose }: { open: boolean; onClose: () =>
       const form = new FormData();
       form.append("file", file);
       const res = await fetch("/api/me/avatar", { method: "POST", body: form });
-      if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error ?? "Upload failed");
+      if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error ?? t("profile.uploadFailed"));
     },
     onSuccess: () => {
       setError(null);
@@ -45,7 +47,7 @@ export function ProfileDialog({ open, onClose }: { open: boolean; onClose: () =>
         <Dialog.Overlay className="fixed inset-0 z-40 bg-black/40 backdrop-blur-[1px]" />
         <Dialog.Content className="fixed left-1/2 top-1/2 z-50 w-[min(380px,92vw)] -translate-x-1/2 -translate-y-1/2 rounded-xl bg-cu-panel shadow-2xl outline-none">
           <div className="flex items-center justify-between border-b border-cu-border px-4 py-3">
-            <Dialog.Title className="text-[14px] font-semibold text-cu-text">My profile</Dialog.Title>
+            <Dialog.Title className="text-[14px] font-semibold text-cu-text">{t("profile.title")}</Dialog.Title>
             <Dialog.Close className="rounded p-1 text-cu-text-tertiary hover:bg-cu-hover">
               <X className="h-4 w-4" />
             </Dialog.Close>
@@ -56,7 +58,7 @@ export function ProfileDialog({ open, onClose }: { open: boolean; onClose: () =>
               onClick={() => fileRef.current?.click()}
               className="group relative h-20 w-20 overflow-hidden rounded-full"
               style={{ backgroundColor: currentUser.color }}
-              title="Change photo"
+              title={t("profile.changePhoto")}
             >
               {currentUser.avatarUrl ? (
                 // eslint-disable-next-line @next/next/no-img-element
@@ -81,11 +83,11 @@ export function ProfileDialog({ open, onClose }: { open: boolean; onClose: () =>
                 }}
               />
             </button>
-            {uploadAvatar.isPending && <span className="text-[12px] text-cu-text-tertiary">Uploading…</span>}
+            {uploadAvatar.isPending && <span className="text-[12px] text-cu-text-tertiary">{t("profile.uploading")}</span>}
 
             <div className="w-full">
               <label className="mb-1 block text-[11px] font-semibold uppercase tracking-wide text-cu-text-tertiary">
-                Display name
+                {t("profile.displayName")}
               </label>
               <input
                 value={name}
@@ -102,14 +104,14 @@ export function ProfileDialog({ open, onClose }: { open: boolean; onClose: () =>
 
           <div className="flex justify-end gap-2 border-t border-cu-border px-4 py-3">
             <button onClick={onClose} className="rounded-md px-3 py-1.5 text-[13px] text-cu-text-secondary hover:bg-cu-hover">
-              Cancel
+              {t("common.cancel")}
             </button>
             <button
               onClick={() => name.trim() && saveName.mutate(name.trim())}
               disabled={!name.trim() || saveName.isPending}
               className="rounded-md bg-cu-purple px-3 py-1.5 text-[13px] font-medium text-white hover:bg-cu-purple-dark disabled:opacity-40"
             >
-              Save
+              {t("common.save")}
             </button>
           </div>
         </Dialog.Content>

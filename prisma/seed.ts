@@ -1,7 +1,8 @@
 import "dotenv/config";
-import { PrismaClient, Priority, StatusType, CustomFieldType, ViewType } from "../lib/generated/prisma/client";
+import { PrismaClient, Priority, StatusType, ViewType } from "../lib/generated/prisma/client";
 import { PrismaPg } from "@prisma/adapter-pg";
 import { hashPassword } from "../lib/password";
+import { DEFAULT_MODULE_STATUSES } from "../lib/modules";
 
 const adapter = new PrismaPg({ connectionString: process.env.DATABASE_URL });
 const prisma = new PrismaClient({ adapter });
@@ -43,6 +44,8 @@ async function main() {
   await prisma.list.deleteMany();
   await prisma.folder.deleteMany();
   await prisma.space.deleteMany();
+  await prisma.featureModule.deleteMany();
+  await prisma.workspaceModuleStatus.deleteMany();
   await prisma.workspaceMember.deleteMany();
   await prisma.workspace.deleteMany();
   await prisma.user.deleteMany();
@@ -71,6 +74,16 @@ async function main() {
         })),
       },
     },
+  });
+
+  await prisma.workspaceModuleStatus.createMany({
+    data: DEFAULT_MODULE_STATUSES.map((s, i) => ({
+      workspaceId: workspace.id,
+      name: s.name,
+      color: s.color,
+      type: s.type as StatusType,
+      position: i,
+    })),
   });
 
   // helper to build a list with statuses + default views
@@ -143,27 +156,6 @@ async function main() {
   });
   await createList({ spaceId: eng.id, name: "Infra", color: "#0ab1e8", position: 0 });
 
-  console.log("🔧 Creating custom fields on Sprint 24...");
-  const cfSprintPoints = await prisma.customField.create({
-    data: { listId: sprintList.id, name: "Story Points", type: CustomFieldType.NUMBER, position: 0 },
-  });
-  const cfEnv = await prisma.customField.create({
-    data: {
-      listId: sprintList.id,
-      name: "Environment",
-      type: CustomFieldType.DROPDOWN,
-      position: 1,
-      options: {
-        create: [
-          { label: "Dev", color: "#3d8df5", position: 0 },
-          { label: "Staging", color: "#ff7800", position: 1 },
-          { label: "Production", color: "#f50000", position: 2 },
-        ],
-      },
-    },
-    include: { options: true },
-  });
-
   console.log("✅ Creating tasks...");
   const S = sprintList.statuses; // [TO DO, IN PROGRESS, IN REVIEW, COMPLETE]
 
@@ -176,8 +168,7 @@ async function main() {
     start?: number;
     tags?: number[];
     desc?: string;
-    points?: number;
-    env?: number;
+    hours?: number;
     subtasks?: { name: string; statusIdx: number; assignees?: number[] }[];
   };
 
@@ -185,7 +176,7 @@ async function main() {
     {
       name: "Build authentication flow",
       statusIdx: 1, priority: Priority.URGENT, assignees: [0, 1], due: 2, start: -1,
-      tags: [0, 1], points: 8, env: 0,
+      tags: [0, 1], hours: 8,
       desc: "<p>Implement Google OAuth and email/password login with session handling.</p>",
       subtasks: [
         { name: "OAuth callback handler", statusIdx: 3, assignees: [0] },
@@ -193,15 +184,15 @@ async function main() {
         { name: "Login UI", statusIdx: 0, assignees: [1] },
       ],
     },
-    { name: "Design new dashboard layout", statusIdx: 2, priority: Priority.HIGH, assignees: [1], due: 1, tags: [2], points: 5 },
-    { name: "Fix board drag-and-drop flicker", statusIdx: 0, priority: Priority.HIGH, assignees: [2], due: 0, tags: [3, 0], points: 3, env: 1 },
-    { name: "Add custom fields to list view", statusIdx: 1, priority: Priority.NORMAL, assignees: [0, 2], due: 4, tags: [0], points: 5 },
-    { name: "Set up CI pipeline", statusIdx: 3, priority: Priority.NORMAL, assignees: [4], due: -2, tags: [1], points: 3, env: 2 },
-    { name: "Write API documentation", statusIdx: 0, priority: Priority.LOW, assignees: [3], due: 7, points: 2 },
-    { name: "Optimize task query performance", statusIdx: 0, priority: Priority.HIGH, assignees: [4], due: 5, tags: [1], points: 8 },
-    { name: "User onboarding tooltips", statusIdx: 2, priority: Priority.NORMAL, assignees: [1, 3], due: 3, tags: [2, 0], points: 5 },
-    { name: "Dark mode support", statusIdx: 0, priority: Priority.LOW, assignees: [2], due: 12, tags: [0, 2], points: 5 },
-    { name: "Notification system", statusIdx: 1, priority: Priority.URGENT, assignees: [0], due: 1, tags: [1], points: 13, env: 0 },
+    { name: "Design new dashboard layout", statusIdx: 2, priority: Priority.HIGH, assignees: [1], due: 1, tags: [2], hours: 5 },
+    { name: "Fix board drag-and-drop flicker", statusIdx: 0, priority: Priority.HIGH, assignees: [2], due: 0, tags: [3, 0], hours: 3 },
+    { name: "Add custom fields to list view", statusIdx: 1, priority: Priority.NORMAL, assignees: [0, 2], due: 4, tags: [0], hours: 5 },
+    { name: "Set up CI pipeline", statusIdx: 3, priority: Priority.NORMAL, assignees: [4], due: -2, tags: [1], hours: 3 },
+    { name: "Write API documentation", statusIdx: 0, priority: Priority.LOW, assignees: [3], due: 7, hours: 2 },
+    { name: "Optimize task query performance", statusIdx: 0, priority: Priority.HIGH, assignees: [4], due: 5, tags: [1], hours: 8 },
+    { name: "User onboarding tooltips", statusIdx: 2, priority: Priority.NORMAL, assignees: [1, 3], due: 3, tags: [2, 0], hours: 5 },
+    { name: "Dark mode support", statusIdx: 0, priority: Priority.LOW, assignees: [2], due: 12, tags: [0, 2], hours: 5 },
+    { name: "Notification system", statusIdx: 1, priority: Priority.URGENT, assignees: [0], due: 1, tags: [1], hours: 13 },
   ];
 
   let pos = 0;
@@ -217,23 +208,13 @@ async function main() {
         position: (pos += 1000),
         startDate: t.start != null ? daysFromNow(t.start) : null,
         dueDate: t.due != null ? daysFromNow(t.due) : null,
+        timeEstimate: t.hours != null ? t.hours * 60 : null,
         completedAt: status.type === "DONE" ? new Date() : null,
         createdById: users[0].id,
         assignees: { create: (t.assignees ?? []).map((i) => ({ userId: users[i].id })) },
         tags: { create: (t.tags ?? []).map((i) => ({ tagId: tags[i].id })) },
       },
     });
-
-    if (t.points != null) {
-      await prisma.customFieldValue.create({
-        data: { taskId: task.id, customFieldId: cfSprintPoints.id, value: t.points },
-      });
-    }
-    if (t.env != null) {
-      await prisma.customFieldValue.create({
-        data: { taskId: task.id, customFieldId: cfEnv.id, value: cfEnv.options[t.env].id },
-      });
-    }
 
     let subPos = 0;
     for (const sub of t.subtasks ?? []) {

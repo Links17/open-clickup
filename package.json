@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "next dev",
+    "dev": "next dev --port 8090",
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
@@ -69,7 +69,9 @@
       "@prisma/client",
       "@prisma/engines",
       "prisma",
-      "esbuild"
+      "esbuild",
+      "sharp",
+      "unrs-resolver"
     ]
   }
 }

@@ -23,6 +23,7 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import * as Popover from "@radix-ui/react-popover";
 import { Plus, MessageSquare, GitBranch, ChevronsLeftRight, ChevronsRightLeft, Gauge } from "lucide-react";
 import { cn, midpoint } from "@/lib/utils";
+import { groupLabel, useT } from "@/lib/i18n";
 import { apiSend } from "@/lib/api";
 import type { ListData, TaskWithRelations, StatusModel } from "@/lib/queries";
 import { useUpdateTask, useCreateTask } from "@/lib/hooks";
@@ -215,6 +216,7 @@ function Column({
   onCollapse: () => void;
 }) {
   const create = useCreateTask(listId);
+  const t = useT();
   const { setNodeRef } = useSortable({ id: group.id, data: { type: "column" } });
   const wip = status?.wipLimit ?? null;
   const overLimit = wip != null && tasks.length > wip;
@@ -222,7 +224,7 @@ function Column({
   return (
     <div className="flex h-full w-[280px] shrink-0 flex-col">
       <div className="group/col mb-2 flex items-center gap-2 px-1">
-        <button onClick={onCollapse} className="rounded p-0.5 text-cu-text-tertiary hover:bg-cu-hover hover:text-cu-text" title="Collapse">
+        <button onClick={onCollapse} className="rounded p-0.5 text-cu-text-tertiary hover:bg-cu-hover hover:text-cu-text" title={t("board.collapse")}>
           <ChevronsRightLeft className="h-3.5 w-3.5" />
         </button>
         <span
@@ -230,7 +232,7 @@ function Column({
           style={{ color: group.color, backgroundColor: `${group.color}1f` }}
         >
           <span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: group.color }} />
-          {group.label}
+          {groupLabel(t, group)}
         </span>
         <span className={cn("text-xs font-medium", overLimit ? "text-cu-urgent" : "text-cu-text-tertiary")}>
           {tasks.length}
@@ -241,7 +243,7 @@ function Column({
           onClick={() =>
             create.mutate({
               listId,
-              name: "New task",
+              name: t("list.newTask"),
               statusId: group.statusId ?? firstStatusId,
               priority: group.defaults?.priority,
               assigneeIds: group.defaults?.assigneeIds,
@@ -279,11 +281,12 @@ function CollapsedColumn({
   count: number;
   onExpand: () => void;
 }) {
+  const t = useT();
   return (
     <button
       onClick={onExpand}
       className="flex h-full w-10 shrink-0 flex-col items-center gap-2 rounded-lg bg-cu-sidebar/60 py-2 hover:bg-cu-sidebar"
-      title={`Expand ${group.label}`}
+      title={t("board.expand", { name: groupLabel(t, group) })}
     >
       <ChevronsLeftRight className="h-3.5 w-3.5 text-cu-text-tertiary" />
       <span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: group.color }} />
@@ -292,7 +295,7 @@ function CollapsedColumn({
         className="mt-1 text-[11px] font-bold uppercase tracking-wide"
         style={{ color: group.color, writingMode: "vertical-rl" }}
       >
-        {group.label}
+        {groupLabel(t, group)}
       </span>
     </button>
   );
@@ -300,6 +303,7 @@ function CollapsedColumn({
 
 function WipEditor({ status, listId }: { status: StatusModel; listId: string }) {
   const qc = useQueryClient();
+  const t = useT();
   const [open, setOpen] = useState(false);
   const [val, setVal] = useState(status.wipLimit?.toString() ?? "");
   const save = useMutation({
@@ -315,7 +319,7 @@ function WipEditor({ status, listId }: { status: StatusModel; listId: string }) 
       <Popover.Trigger asChild>
         <button
           className="rounded p-0.5 text-cu-text-tertiary opacity-0 transition-opacity hover:bg-cu-hover hover:text-cu-text group-hover/col:opacity-100"
-          title="WIP limit"
+          title={t("board.wipLimit")}
         >
           <Gauge className="h-3.5 w-3.5" />
         </button>
@@ -328,7 +332,7 @@ function WipEditor({ status, listId }: { status: StatusModel; listId: string }) 
           className="z-50 w-[200px] rounded-lg border border-cu-border bg-cu-panel p-2.5 shadow-lg"
         >
           <div className="mb-1.5 text-[11px] font-semibold uppercase tracking-wide text-cu-text-tertiary">
-            WIP limit
+            {t("board.wipLimit")}
           </div>
           <div className="flex items-center gap-1.5">
             <input
@@ -340,14 +344,14 @@ function WipEditor({ status, listId }: { status: StatusModel; listId: string }) 
               onKeyDown={(e) => {
                 if (e.key === "Enter") save.mutate(val ? parseInt(val, 10) : null);
               }}
-              placeholder="None"
+              placeholder={t("common.none")}
               className="w-full rounded border border-cu-border bg-cu-bg px-2 py-1 text-[13px] outline-none focus:border-cu-purple"
             />
             <button
               onClick={() => save.mutate(val ? parseInt(val, 10) : null)}
               className="rounded bg-cu-purple px-2 py-1 text-[12px] font-medium text-white hover:bg-cu-purple-dark"
             >
-              Set
+              {t("common.set")}
             </button>
           </div>
           {status.wipLimit != null && (
@@ -355,7 +359,7 @@ function WipEditor({ status, listId }: { status: StatusModel; listId: string }) 
               onClick={() => save.mutate(null)}
               className="mt-1.5 text-[12px] text-cu-text-tertiary hover:text-cu-urgent"
             >
-              Clear limit
+              {t("board.clearLimit")}
             </button>
           )}
         </Popover.Content>
@@ -399,11 +403,13 @@ function Card({ task, overlay }: { task: TaskWithRelations; overlay?: boolean })
         <PriorityFlag priority={task.priority} />
       </div>
 
-      {task.tags.length > 0 && (
+      {task.module && (
         <div className="mt-2 flex flex-wrap gap-1 pl-5">
-          {task.tags.map((t) => (
-            <TagChip key={t.tagId} name={t.tag.name} color={t.tag.color} />
-          ))}
+          <TagChip
+            name={task.module.name}
+            color={task.module.status.color}
+            className="max-w-[7rem] truncate"
+          />
         </div>
       )}
 

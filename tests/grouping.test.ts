@@ -12,7 +12,14 @@ const members = [
   { id: "u2", name: "Bob" },
 ] as unknown as UserLite[];
 
-function mkTask(p: { id: string; statusId: string; priority?: string | null; assignees?: string[] }): TaskWithRelations {
+function mkTask(p: {
+  id: string;
+  statusId: string;
+  priority?: string | null;
+  assignees?: string[];
+  moduleId?: string | null;
+  module?: { id: string; name: string } | null;
+}): TaskWithRelations {
   return {
     id: p.id,
     statusId: p.statusId,
@@ -20,6 +27,8 @@ function mkTask(p: { id: string; statusId: string; priority?: string | null; ass
     assignees: (p.assignees ?? []).map((userId) => ({ userId })),
     tags: [],
     position: 0,
+    moduleId: p.moduleId ?? null,
+    module: p.module ?? null,
   } as unknown as TaskWithRelations;
 }
 
@@ -59,5 +68,19 @@ describe("groupTasks", () => {
     const g = groupTasks(tasks, "none", { statuses, members });
     expect(g).toHaveLength(1);
     expect(g[0].tasks).toHaveLength(3);
+  });
+
+  it("groups by module with a 'no module' bucket", () => {
+    const withModules = [
+      mkTask({ id: "a", statusId: "todo", moduleId: "m1", module: { id: "m1", name: "Auth" } }),
+      mkTask({ id: "b", statusId: "done", moduleId: null }),
+      mkTask({ id: "c", statusId: "todo", moduleId: "m1", module: { id: "m1", name: "Auth" } }),
+    ];
+    const g = groupTasks(withModules, "module", { statuses, members });
+    const auth = g.find((x) => x.id === "m1");
+    const none = g.find((x) => x.id === "none");
+    expect(auth?.label).toBe("Auth");
+    expect(auth?.tasks.map((t) => t.id).sort()).toEqual(["a", "c"]);
+    expect(none?.tasks.map((t) => t.id)).toEqual(["b"]);
   });
 });
